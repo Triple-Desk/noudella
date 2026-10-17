@@ -4,14 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#6D1833">
-<title>نوديلا | إدارة المشروع</title>
+<title>Noudella</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="favicon-64.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="Noudella">
+<meta name="application-name" content="Noudella">
 <meta name="robots" content="noindex,nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Cormorant+Garamond:wght@600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#FAF8F6; --card:#FFFFFF; --ink:#30272B; --ink-2:#6E6267; --ink-3:#9A8F93;
@@ -38,7 +40,8 @@ svg.i.sm{width:18px;height:18px}
 .topbar{position:sticky;top:0;z-index:20;background:rgba(250,248,246,.92);backdrop-filter:saturate(1.2) blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid var(--line-2)}
 .topbar-in{max-width:1120px;margin:0 auto;display:flex;align-items:center;gap:10px;padding:12px 16px;min-height:60px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--primary);font-size:19px;letter-spacing:.2px}
-.brand .mark{width:34px;height:34px;border-radius:11px;background:linear-gradient(145deg,var(--primary),var(--primary-2));display:grid;place-items:center;color:#fff;font-size:17px;box-shadow:0 4px 12px rgba(109,24,51,.25)}
+.brand .mark{width:38px;height:38px;border-radius:50%;object-fit:cover;display:block;flex:none;box-shadow:0 3px 10px rgba(140,104,40,.28)}
+.wm{font-family:'Cormorant Garamond',Georgia,serif;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--primary);font-size:20px;line-height:1}
 .topbar h1{font-size:19px;margin:0;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wrap{max-width:1120px;margin:0 auto;padding:16px}
 .bottomnav{position:fixed;bottom:0;left:0;right:0;z-index:30;background:#fff;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(6,1fr);padding:6px 4px calc(6px + var(--safe-b));height:calc(var(--nav-h) + var(--safe-b))}
@@ -220,7 +223,7 @@ table.t td.n,table.t th.n{text-align:left}
 .busybar:before{content:"";position:absolute;inset:0;width:40%;background:var(--primary-2);animation:slide 1s infinite ease-in-out}
 @keyframes slide{from{transform:translateX(-120%)}to{transform:translateX(320%)}}
 .splash{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);z-index:100}
-.splash .logo{width:74px;height:74px;border-radius:24px;background:linear-gradient(145deg,var(--primary),var(--primary-2));display:grid;place-items:center;color:#fff;font-size:34px;font-weight:700;margin:0 auto 14px;box-shadow:0 12px 30px rgba(109,24,51,.3);animation:pulse 1.4s infinite}
+.splash .logo{width:132px;height:132px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 16px;box-shadow:0 14px 34px rgba(140,104,40,.28);animation:pulse 1.6s infinite}
 @keyframes pulse{50%{transform:scale(.94)}}
 .skel{background:linear-gradient(90deg,#F1EBED 25%,#F8F4F5 37%,#F1EBED 63%);background-size:400% 100%;animation:sk 1.4s infinite;border-radius:12px}
 @keyframes sk{0%{background-position:100% 50%}100%{background-position:0 50%}}
@@ -235,11 +238,11 @@ table.t td.n,table.t th.n{text-align:left}
 </style>
 </head>
 <body>
-<div class="splash" id="splash"><div style="text-align:center"><div class="logo">ن</div><div style="font-weight:700;color:var(--primary);font-size:20px">نوديلا</div><div class="faint">جاري التحميل…</div></div></div>
+<div class="splash" id="splash"><div style="text-align:center"><img class="logo" src="logo-full.png" alt="Noudella"><div class="faint">جاري التحميل…</div></div></div>
 <div class="busybar" id="busybar"></div>
 <div class="app">
   <aside class="side">
-    <div class="brand"><span class="mark">ن</span><span id="sideName">نوديلا</span></div>
+    <div class="brand"><img class="mark" src="logo-mark.png" alt=""><span class="wm">Noudella</span></div>
     <nav id="sideNav"></nav>
     <div class="foot">نظام إدارة المشروع<br><span id="verTxt"></span></div>
   </aside>
@@ -447,7 +450,7 @@ function topbar(title, opts) {
   opts = opts || {};
   var h = '';
   if (opts.back) h += '<button class="iconbtn" data-act="nav" data-v="' + opts.back + '" aria-label="رجوع">' + ic('back') + '</button>';
-  else h += '<div class="brand"><span class="mark">ن</span></div>';
+  else h += '<div class="brand"><img class="mark" src="logo-mark.png" alt=""></div>';
   h += '<h1>' + esc(title) + '</h1>';
   if (opts.right) h += opts.right;
   if (!opts.back) h += '<button class="iconbtn" data-act="nav" data-v="settings" aria-label="الإعدادات">' + ic('settings') + '</button>';
@@ -456,8 +459,6 @@ function topbar(title, opts) {
 function render() {
   if (!S.data) return;
   renderNav();
-  var name = (S.data.settings || {}).business_name || 'نوديلا';
-  document.getElementById('sideName').textContent = name;
   document.getElementById('verTxt').textContent = 'الإصدار ' + (S.data.version || '');
   var v = S.view, el = document.getElementById('view');
   var fn = VIEWS[v] || VIEWS.dashboard;
@@ -469,7 +470,7 @@ function render() {
 var VIEWS = {}, AFTER = {};
 
 VIEWS.dashboard = function () {
-  var d = S.data, name = (d.settings || {}).business_name || 'نوديلا';
+  var d = S.data, name = (d.settings || {}).business_name || 'Noudella';
   topbar(name);
   var month = today().slice(0, 7);
   var mo = d.orders.filter(function (o) { return (o.status === 'confirmed' || o.status === 'delivered') && String(o.order_date).slice(0, 7) === month; });
@@ -1226,7 +1227,7 @@ function boot() {
     document.getElementById('splash').remove();
     render();
   }).catch(function (e) {
-    document.getElementById('splash').innerHTML = '<div style="text-align:center;padding:24px"><div class="logo" style="animation:none">!</div><div style="font-weight:700">تعذر تحميل البيانات</div><div class="faint">' + esc(e.message) + '</div><button class="btn btn-primary mt" onclick="location.reload()">إعادة المحاولة</button></div>';
+    document.getElementById('splash').innerHTML = '<div style="text-align:center;padding:24px"><img class="logo" src="logo-full.png" alt="" style="animation:none"><div style="font-weight:700">تعذر تحميل البيانات</div><div class="faint">' + esc(e.message) + '</div><button class="btn btn-primary mt" onclick="location.reload()">إعادة المحاولة</button></div>';
   });
 }
 boot();
