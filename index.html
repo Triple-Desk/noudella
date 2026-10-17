@@ -233,6 +233,38 @@ table.t td.n,table.t th.n{text-align:left}
 .link{background:none;border:0;color:var(--primary);font-weight:600;cursor:pointer;padding:0;font-size:inherit}
 .fab{position:fixed;left:18px;bottom:calc(var(--nav-h) + var(--safe-b) + 16px);z-index:25;height:56px;border-radius:18px;padding:0 20px;box-shadow:0 10px 26px rgba(109,24,51,.35)}
 @media (min-width:960px){.fab{display:none}}
+.avatar,.hero-img{position:relative;overflow:hidden}
+.avatar img,.hero-img img,.pimg img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+/* invoice */
+.inv-wrap{max-width:640px;margin:0 auto}
+.inv-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.inv-actions .btn{padding:0 8px;font-size:14px}
+.invoice{position:relative;background:#fff;border-radius:18px;box-shadow:var(--shadow);border:1px solid #F0E6D8;padding:26px 24px 20px;overflow:hidden;color:#30272B}
+.invoice .gold{position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#C9A24B,#EAD79F,#C9A24B)}
+.inv-head{display:flex;align-items:center;gap:14px}
+.inv-logo{width:82px;height:82px;border-radius:50%;flex:none;display:block}
+.inv-brand{flex:1;min-width:0}
+.inv-brand .wm{font-size:24px}
+.inv-brand .t{font-size:14px;color:var(--ink-2);margin-top:6px;font-weight:600}
+.stamp{flex:none;transform:rotate(-12deg);border:3px solid currentColor;border-radius:14px;padding:7px 14px 6px;text-align:center;line-height:1.2;opacity:.9;position:relative}
+.stamp i{position:absolute;inset:3px;border:1.5px solid currentColor;border-radius:9px}
+.stamp b{display:block;font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;letter-spacing:.12em}
+.stamp span{display:block;font-size:13px;font-weight:700}
+.s-draft{color:#8A8086}.s-confirmed{color:#6D1833}.s-delivered{color:#1E7A4F}.s-cancelled{color:#B42318}
+.inv-info{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:18px 0 14px;padding:12px;border-radius:12px;background:#FBF6EE}
+.inv-info div{min-width:0}.inv-info small{display:block;color:#8A6A2B;font-size:12px;font-weight:600}.inv-info b{font-size:15px;word-break:break-word}
+.inv-table th{background:#FBF6EE;color:#8A6A2B}
+.inv-sum{margin-top:8px}
+.inv-total{display:flex;justify-content:space-between;align-items:center;background:var(--primary);color:#fff;border-radius:12px;padding:12px 16px;margin-top:10px;font-weight:700;font-size:18px}
+.inv-total.void{background:#9E8E94;text-decoration:line-through}
+.inv-foot{text-align:center;margin-top:18px;color:#8A6A2B;font-size:13px}
+@media print{
+  body{background:#fff}
+  .side,.bottomnav,.topbar,.inv-actions,.toasts,.fab,#busybar{display:none!important}
+  .main{padding:0!important}.wrap{padding:0!important;max-width:none}
+  .invoice{box-shadow:none;border:0;border-radius:0}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
 .desk-only{display:none}
 @media (min-width:960px){.desk-only{display:inline-flex}}
 </style>
@@ -339,6 +371,7 @@ function costText(avg, base) {
 function unitOpts(base, sel) { return (DIM_UNITS[base] || [base]).map(function (u) { return '<option value="' + u + '"' + (u === sel ? ' selected' : '') + '>' + UNIT_AR[u] + '</option>'; }).join(''); }
 function rid() { return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
 function today() { return (S.data && S.data.today) || new Date().toISOString().slice(0, 10); }
+function picImg(url) { return url ? '<img loading="lazy" src="' + esc(url) + '" alt="" onerror="this.remove()">' : ''; }
 function initials(s) { s = String(s || '').trim(); return esc(s.charAt(0) || '؟'); }
 function mats() { return (S.data.materials || []); }
 function prods() { return (S.data.products || []); }
@@ -438,7 +471,7 @@ function go(view, param) {
 }
 function renderNav() {
   var base = S.view.split(':')[0];
-  var top = { product: 'products', material: 'materials', order: 'orders', orderEdit: 'orders' }[base] || base;
+  var top = { product: 'products', material: 'materials', order: 'orders', orderEdit: 'orders', invoice: 'orders' }[base] || base;
   var side = NAV.map(function (x) { return '<button class="' + (x.id === top ? 'on' : '') + '" data-act="nav" data-v="' + x.id + '">' + ic(x.i) + '<span>' + x.t + '</span></button>'; }).join('');
   side += '<button class="' + (base === 'settings' ? 'on' : '') + '" data-act="nav" data-v="settings">' + ic('settings') + '<span>الإعدادات</span></button>';
   document.getElementById('sideNav').innerHTML = side;
@@ -528,11 +561,12 @@ VIEWS.products = function () {
   h += '<div class="pgrid">' + list.map(function (p) {
     var c = p.cost;
     return '<div class="card pcard" data-act="nav" data-v="product" data-p="' + esc(p.id) + '">' +
-      '<div class="pimg">' + (p.image_url ? '<img loading="lazy" src="' + esc(p.image_url) + '" alt="">' : initials(p.name)) +
+      '<div class="pimg">' + initials(p.name) + picImg(p.image_url) +
       (c.warnings.length ? '<span class="flag badge b-warn">' + ic('alert', 'sm') + '</span>' : '') + '</div>' +
       '<div class="pbody"><div class="pname">' + esc(p.name) + '</div>' +
       '<div class="pmeta"><span>التكلفة</span><span class="num">' + fmt(c.total) + '</span></div>' +
       '<div class="pmeta"><span>السعر</span><span class="pprice">' + money(p.selling_price) + '</span></div>' +
+      '<div class="pmeta"><span>في المخزن</span><span class="num ' + (n(p.stock) < 0 ? 'neg' : '') + '">' + fmt(p.stock, 0) + '</span></div>' +
       '<div style="margin-top:auto;padding-top:4px">' + marginBadge(c, target()) + '</div></div></div>';
   }).join('') + '</div>';
   h += '<button class="btn btn-primary fab" data-act="newProduct">' + ic('plus') + 'منتج جديد</button>';
@@ -545,7 +579,7 @@ VIEWS.product = function (id) {
   var c = p.cost, tm = target();
   topbar(p.name, { back: 'products', right: '<button class="iconbtn" data-act="editProduct" data-p="' + esc(p.id) + '" aria-label="تعديل">' + ic('edit') + '</button>' });
   var h = '<div class="split"><div>';
-  h += '<div class="card pad"><div class="hero-head"><div class="hero-img">' + (p.image_url ? '<img src="' + esc(p.image_url) + '" alt="">' : initials(p.name)) + '</div>' +
+  h += '<div class="card pad"><div class="hero-head"><div class="hero-img">' + initials(p.name) + picImg(p.image_url) + '</div>' +
     '<div style="min-width:0"><div style="font-size:20px;font-weight:700">' + esc(p.name) + '</div><div class="faint">' + esc(p.category || 'بدون تصنيف') +
     ' · جاهز في المخزن: ' + qtyText(p.stock, 'pcs') + '</div>' + (!isActive(p) ? '<span class="badge b-gray mt">مؤرشف</span>' : '') + '</div></div>';
   h += '<div class="grid g2 g4 mt">' + stat('تكلفة القطعة', money(c.total)) + stat('سعر البيع', money(p.selling_price)) +
@@ -572,6 +606,11 @@ VIEWS.product = function (id) {
     if (n(c.other) > 0) h += '<tr><td colspan="2"><b>' + esc(p.other_cost_label || 'تكلفة أخرى للقطعة') + '</b></td><td class="n">' + money(c.other, 3) + '</td><td></td></tr>';
     h += '<tr><td colspan="2" style="font-weight:700">إجمالي تكلفة القطعة</td><td class="n" style="font-weight:700">' + money(c.total, 3) + '</td><td></td></tr></tbody></table></div>';
   }
+  var pmv = (S.data.movements || []).filter(function (x) { return x.item_id === p.id; }).slice(0, 30);
+  h += '<div class="sect"><h2>حركة المنتج في المخزن</h2></div>';
+  h += pmv.length ? '<div class="card tscroll"><table class="t"><thead><tr><th>التاريخ</th><th>الحركة</th><th class="n">القطع</th><th class="n">الرصيد بعدها</th></tr></thead><tbody>' + pmv.map(function (x) {
+    return '<tr><td>' + fmtDate(x.mv_date) + '</td><td>' + MV_AR(x) + (x.notes ? '<div class="faint">' + esc(x.notes) + '</div>' : '') + '</td><td class="n ' + (n(x.qty) < 0 ? 'neg' : 'pos') + '"><span class="num">' + fmt(x.qty, 0) + '</span></td><td class="n"><span class="num">' + fmt(x.stock_after, 0) + '</span></td></tr>';
+  }).join('') + '</tbody></table></div>' : '<div class="card empty">لسه مفيش حركة — القطع بتدخل المخزن من "الإنتاج" وبتخرج لما تأكد طلب.</div>';
   h += '</div><div class="sticky">';
   var tot = c.total || 1;
   h += '<div class="card pad"><div class="between mb"><b>توزيع التكلفة</b><span class="faint">لكل قطعة</span></div><div class="bars">' +
@@ -597,23 +636,29 @@ function productForm(p) {
     '<div class="field"><label>التصنيف</label><input class="inp" id="pf_cat" maxlength="40" list="pcats" value="' + esc(p.category) + '" placeholder="شموع، هدايا، جبس…"><datalist id="pcats">' + cats.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist></div>' +
     '<div class="field"><label>سعر البيع للقطعة (' + cur() + ')</label><input class="inp ltr" id="pf_price" inputmode="decimal" value="' + esc(p.selling_price || '') + '" placeholder="0"></div>' +
     '<div class="field"><label>تكلفة إضافية لكل قطعة (اختياري)</label><div class="combo"><input class="inp ltr" id="pf_other" inputmode="decimal" value="' + esc(n(p.other_cost) ? p.other_cost : '') + '" placeholder="0"><input class="inp" id="pf_other_l" maxlength="40" value="' + esc(p.other_cost_label) + '" placeholder="مثلاً: مصنعية / كهرباء"></div><span class="hint">أي تكلفة ثابتة للقطعة مش خامة (مصنعية، كهرباء…). التغليف يتسجل في الوصفة مش هنا.</span></div>' +
-    '<div class="field"><label>صورة المنتج (اختياري)</label><div class="row"><div class="hero-img" id="pf_prev" style="width:64px;height:64px;border-radius:16px">' + (p.image_url ? '<img src="' + esc(p.image_url) + '">' : ic('image')) + '</div>' +
-    '<label class="btn btn-ghost btn-sm" style="cursor:pointer">' + ic('image', 'sm') + 'اختيار صورة<input type="file" accept="image/*" id="pf_img" class="hide"></label>' +
-    (p.image_url ? '<button class="link" data-act="pfRemoveImg">حذف الصورة</button>' : '') + '</div></div>' +
+    photoField('pf', p.image_url, 'صورة المنتج (اختياري)') +
     '<div class="field"><label>ملاحظات</label><textarea class="inp" id="pf_notes" maxlength="300">' + esc(p.notes) + '</textarea></div>';
   S.pf = { id: p.id || '', rid: rid(), image: null, removeImage: false };
   modal({ title: p.id ? 'تعديل المنتج' : 'منتج جديد', body: body,
     footer: '<button class="btn btn-ghost" data-act="closeModal">إلغاء</button><button class="btn btn-primary" data-lockable data-act="saveProduct">' + ic('save', 'sm') + 'حفظ</button>',
-    mount: function () {
-      document.getElementById('pf_img').addEventListener('change', function (e) {
-        var f = e.target.files && e.target.files[0]; if (!f) return;
-        resizeImage(f, 900, function (dataUrl) {
-          if (!dataUrl) { toast('الصورة دي مش مدعومة', 'err'); return; }
-          S.pf.image = { mime: 'image/jpeg', data: dataUrl.split(',')[1] };
-          document.getElementById('pf_prev').innerHTML = '<img src="' + dataUrl + '">';
-        });
-      });
-    } });
+    mount: function () { bindPhoto('pf', S.pf); } });
+}
+function photoField(prefix, url, label) {
+  return '<div class="field"><label>' + (label || 'صورة (اختياري)') + '</label><div class="row"><div class="hero-img" id="' + prefix + '_prev" style="width:64px;height:64px;border-radius:16px">' + (url ? '<img src="' + esc(url) + '">' : ic('image')) + '</div>' +
+    '<label class="btn btn-ghost btn-sm" style="cursor:pointer">' + ic('image', 'sm') + 'اختيار صورة<input type="file" accept="image/*" id="' + prefix + '_img" class="hide"></label>' +
+    '<button type="button" class="link' + (url ? '' : ' hide') + '" id="' + prefix + '_rm">حذف الصورة</button></div></div>';
+}
+function bindPhoto(prefix, state) {
+  var inp = document.getElementById(prefix + '_img'), rm = document.getElementById(prefix + '_rm');
+  inp.addEventListener('change', function (e) {
+    var f = e.target.files && e.target.files[0]; if (!f) return;
+    resizeImage(f, 900, function (dataUrl) {
+      if (!dataUrl) { toast('الصورة دي مش مدعومة', 'err'); return; }
+      state.image = { mime: 'image/jpeg', data: dataUrl.split(',')[1] }; state.removeImage = false;
+      document.getElementById(prefix + '_prev').innerHTML = '<img src="' + dataUrl + '">'; rm.classList.remove('hide');
+    });
+  });
+  rm.addEventListener('click', function () { state.image = null; state.removeImage = true; document.getElementById(prefix + '_prev').innerHTML = ic('image'); rm.classList.add('hide'); });
 }
 function resizeImage(file, max, cb) {
   var rd = new FileReader();
@@ -682,7 +727,7 @@ VIEWS.materials = function () {
   if (!list.length) return h + emptyBox('layers', 'مفيش خامات هنا', f.archived ? '' : 'newMaterial', 'إضافة خامة');
   h += '<div class="card list">' + list.map(function (m) {
     var low = m.kind !== 'tool' && isLow(m);
-    return '<div class="li" data-act="nav" data-v="material" data-p="' + esc(m.id) + '"><div class="avatar">' + initials(m.name) + '</div>' +
+    return '<div class="li" data-act="nav" data-v="material" data-p="' + esc(m.id) + '"><div class="avatar">' + initials(m.name) + picImg(m.image_url) + '</div>' +
       '<div class="grow"><div class="main-t">' + esc(m.name) + '</div><div class="faint">' + KIND_ONE[m.kind] + (m.category ? ' · ' + esc(m.category) : '') + '</div>' +
       '<div class="faint" style="font-size:12.5px">' + costText(m.avg_cost, m.base_unit) + '</div></div>' +
       '<div class="end"><div style="font-weight:700">' + qtyText(m.stock, m.base_unit) + '</div>' + (low ? '<span class="badge b-bad">' + (n(m.stock) < 0 ? 'رصيد سالب' : 'قليل') + '</span>' : (m.kind === 'tool' ? '<span class="badge b-info">أداة</span>' : '<span class="faint">متاح</span>')) + '</div></div>';
@@ -697,7 +742,7 @@ VIEWS.material = function (id) {
   topbar(m.name, { back: 'materials', right: '<button class="iconbtn" data-act="editMaterial" data-p="' + esc(m.id) + '" aria-label="تعديل">' + ic('edit') + '</button>' });
   var usedIn = (S.data.recipes || []).filter(function (r) { return r.material_id === m.id; }).map(function (r) { return prodById(r.product_id); }).filter(Boolean);
   var h = '<div class="split"><div>';
-  h += '<div class="card pad"><div class="hero-head"><div class="avatar" style="width:64px;height:64px;border-radius:18px;font-size:26px">' + initials(m.name) + '</div><div><div style="font-size:20px;font-weight:700">' + esc(m.name) + '</div>' +
+  h += '<div class="card pad"><div class="hero-head"><div class="avatar" style="width:64px;height:64px;border-radius:18px;font-size:26px">' + initials(m.name) + picImg(m.image_url) + '</div><div><div style="font-size:20px;font-weight:700">' + esc(m.name) + '</div>' +
     '<div class="faint">' + KIND_ONE[m.kind] + (m.category ? ' · ' + esc(m.category) : '') + (m.supplier ? ' · المورد: ' + esc(m.supplier) : '') + '</div>' + (!isActive(m) ? '<span class="badge b-gray">مؤرشفة</span>' : '') + '</div></div>' +
     '<div class="grid g2 mt">' + stat('الرصيد الحالي', qtyText(m.stock, m.base_unit)) + stat('متوسط التكلفة', costText(m.avg_cost, m.base_unit)) +
     (m.kind === 'tool' ? stat('عدد مرات الاستخدام', '<span class="num">' + fmt(m.life_units, 0) + '</span>') + stat('نصيب القطعة', n(m.life_units) ? money(n(m.avg_cost) / n(m.life_units), 3) : '—')
@@ -717,14 +762,14 @@ VIEWS.material = function (id) {
   return h;
 };
 function MV_AR(x) {
-  var t = { OPENING: 'رصيد افتتاحي', PURCHASE: 'شراء', PURCHASE_REVERSAL: 'إلغاء شراء', CONSUME: 'استهلاك في إنتاج', CONSUME_REVERSAL: 'إلغاء استهلاك', COUNT: 'جرد', WASTE: 'هالك', ADD: 'إضافة', PRICE: 'تعديل سعر', PRODUCE: 'إنتاج', PRODUCE_REVERSAL: 'إلغاء إنتاج', SALE: 'تسليم طلب' }[x.type] || x.type;
+  var t = { OPENING: 'رصيد افتتاحي', PURCHASE: 'شراء', PURCHASE_REVERSAL: 'إلغاء شراء', CONSUME: 'استهلاك في إنتاج', CONSUME_REVERSAL: 'إلغاء استهلاك', COUNT: 'جرد', WASTE: 'هالك', ADD: 'إضافة', PRICE: 'تعديل سعر', PRODUCE: 'إنتاج', PRODUCE_REVERSAL: 'إلغاء إنتاج', SALE: 'بيع في طلب', SALE_RETURN: 'رجوع من طلب ملغي' }[x.type] || x.type;
   return '<b>' + t + '</b>';
 }
 
 function materialForm(m, after) {
   var isNew = !m; m = m || { kind: 'raw', base_unit: 'g' };
   var cats = []; mats().forEach(function (x) { if (x.category && cats.indexOf(x.category) < 0) cats.push(x.category); });
-  S.mf = { id: m.id || '', kind: m.kind, base: m.base_unit, rid: rid(), after: after || null };
+  S.mf = { id: m.id || '', kind: m.kind, base: m.base_unit, rid: rid(), after: after || null, image: null, removeImage: false };
   var priceDefault = isNew ? '' : (function () {
     var big = { g: ['kg', 1000], ml: ['ml', 1], cm: ['m', 100], pcs: ['pcs', 1] }[m.base_unit];
     return { amount: +(n(m.avg_cost) * big[1]).toFixed(4), qty: 1, unit: big[0] };
@@ -741,10 +786,11 @@ function materialForm(m, after) {
     '<div class="field" id="mf_minwrap"><label>نبهني لما الرصيد يقل عن</label><div class="combo"><input class="inp ltr" id="mf_min" inputmode="decimal" placeholder="اختياري" value="' + esc(n(m.min_stock) ? m.min_stock : '') + '"><select class="inp unit" id="mf_munit"></select></div></div>' +
     '<div class="field" id="mf_lifewrap"><label>القالب بيعمل كام قطعة قبل ما يتغير؟</label><input class="inp ltr" id="mf_life" inputmode="numeric" value="' + esc(m.life_units || '') + '" placeholder="مثلاً 100"><span class="hint">سعر القالب بيتقسم على العدد ده، ونصيب كل قطعة بيدخل في تكلفتها.</span></div>' +
     '<div class="field"><label>المورد (اختياري)</label><input class="inp" id="mf_sup" maxlength="60" value="' + esc(m.supplier) + '"></div>' +
+    photoField('mf', m.image_url, 'صورة الخامة (اختياري)') +
     '<div class="field"><label>ملاحظات</label><textarea class="inp" id="mf_notes" maxlength="300">' + esc(m.notes) + '</textarea></div>';
   modal({ title: isNew ? 'خامة جديدة' : 'تعديل الخامة', body: body,
     footer: '<button class="btn btn-ghost" data-act="closeModal">إلغاء</button><button class="btn btn-primary" data-lockable data-act="saveMaterial">' + ic('save', 'sm') + 'حفظ</button>',
-    mount: function () { mfSync(priceDefault ? priceDefault.unit : null); S.mf.orig = val('mf_amount') + '|' + val('mf_pqty') + '|' + val('mf_punit'); } });
+    mount: function () { bindPhoto('mf', S.mf); mfSync(priceDefault ? priceDefault.unit : null); S.mf.orig = val('mf_amount') + '|' + val('mf_pqty') + '|' + val('mf_punit'); } });
 }
 function mfSync(priceUnit) {
   var b = S.mf.base;
@@ -831,10 +877,10 @@ VIEWS.orderEdit = function () {
     '<div class="grid g2"><div class="field" style="margin:0"><label>رسوم بيدفعها العميل (زي التوصيل)</label><input class="inp ltr" inputmode="decimal" id="od_charges" data-live="od" value="' + esc(d.charges) + '" placeholder="0"></div>' +
     '<div class="field" style="margin:0"><label>خصم</label><input class="inp ltr" inputmode="decimal" id="od_discount" data-live="od" value="' + esc(d.discount) + '" placeholder="0"></div></div>' +
     '<div class="field mt" style="margin-bottom:0"><label>ملاحظات</label><textarea class="inp" id="od_notes" maxlength="300" data-live="od">' + esc(d.notes) + '</textarea></div></div>';
-  h += '<div class="sect"><h2>الخامات المطلوبة للطلب</h2></div><div class="card" id="od_need"></div><div class="faint mt">للعلم بس — الخامات مش بتتخصم إلا لما تسجل "إنتاج".</div>';
+  h += '<div class="sect"><h2>الخامات المطلوبة للطلب</h2></div><div class="card" id="od_need"></div><div class="faint mt">الخامات بتتخصم بس لما يتسجل إنتاج — يدويًا أو تلقائيًا للقطع الناقصة عند تأكيد الطلب.</div>';
   h += '</div><div class="sticky"><div class="card pad" id="od_sum"></div>' +
     '<div class="grid g2 mt"><button class="btn btn-ghost" data-lockable data-act="odSave">' + ic('save', 'sm') + 'حفظ مسودة</button><button class="btn btn-primary" data-lockable data-act="odConfirm">' + ic('check', 'sm') + 'تأكيد الطلب</button></div>' +
-    '<div class="faint mt">التأكيد بيثبّت الأسعار والتكلفة وقتها — أي تغيير في أسعار الخامات بعد كده مش هيأثر على ربح الطلب ده.</div></div></div>';
+    '<div class="faint mt">التأكيد بيثبّت الأسعار والتكلفة، وبيخصم القطع من مخزن المنتجات الجاهزة. لو الطلب اتلغى بعد كده القطع بترجع المخزن.</div></div></div>';
   return h;
 };
 AFTER.orderEdit = function () { odCalc(); };
@@ -877,7 +923,9 @@ function odCalc() {
     var el = document.getElementById('odcalc' + i); if (!el) return;
     if (!l.p) { el.innerHTML = ''; return; }
     var lp = l.qty * (l.unit_price - l.unit_cost);
-    el.innerHTML = '<span>تكلفة القطعة: <b>' + money(l.unit_cost) + '</b></span><span>الإجمالي: <b>' + money(l.qty * l.unit_price) + '</b></span><span>تكلفة السطر: <b>' + money(l.qty * l.unit_cost) + '</b></span><span class="' + (lp < 0 ? 'neg' : 'pos') + '">ربح: <b>' + money(lp) + '</b></span>' +
+    var used = t.lines.reduce(function (a, x) { return a + (x.p && x.p.id === l.p.id ? x.qty : 0); }, 0), ready = Math.max(0, n(l.p.stock));
+    el.innerHTML = (used > ready ? '<span class="badge b-warn">جاهز ' + fmt(ready, 0) + ' بس — هيتنتج الناقص عند التأكيد</span>' : '<span class="badge b-ok">جاهز في المخزن: ' + fmt(ready, 0) + '</span>') +
+      '<span>تكلفة القطعة: <b>' + money(l.unit_cost) + '</b></span><span>الإجمالي: <b>' + money(l.qty * l.unit_price) + '</b></span><span>تكلفة السطر: <b>' + money(l.qty * l.unit_cost) + '</b></span><span class="' + (lp < 0 ? 'neg' : 'pos') + '">ربح: <b>' + money(lp) + '</b></span>' +
       (l.p.cost.warnings.length ? '<span class="badge b-warn">' + ic('alert', 'sm') + esc(l.p.cost.warnings[0]) + '</span>' : '');
   });
   var s = document.getElementById('od_sum');
@@ -900,6 +948,83 @@ function odPayload(confirm) {
     lines: d.lines.map(function (l) { return { product_id: l.product_id, qty: parseIn(l.qty), unit_price: parseIn(l.unit_price) === '' ? 0 : parseIn(l.unit_price) }; }), confirm: !!confirm };
 }
 
+/* ----- stock check before confirming: ready pieces, then materials for the missing pieces ----- */
+function orderShortage(lines) {
+  var acc = {}, list = [];
+  (lines || []).forEach(function (l) {
+    if (!acc[l.product_id]) { acc[l.product_id] = { p: prodById(l.product_id), need: 0 }; list.push(acc[l.product_id]); }
+    acc[l.product_id].need += n(l.qty);
+  });
+  return list.filter(function (x) { return x.p; }).map(function (x) { x.ready = Math.max(0, n(x.p.stock)); x.short = Math.max(0, x.need - x.ready); return x; })
+    .filter(function (x) { return x.short > 0; });
+}
+function confirmFlow(lines, go2) {
+  var short = orderShortage(lines);
+  if (!short.length) {
+    var pieces = lines.reduce(function (a, l) { return a + n(l.qty); }, 0);
+    confirmBox('تأكيد الطلب', 'هيتم تثبيت الأسعار والتكلفة، وخصم ' + fmt(pieces, 0) + ' قطعة من مخزن المنتجات الجاهزة.', 'تأكيد').then(function (y) { if (y) go2(false); });
+    return;
+  }
+  var noRecipe = short.filter(function (x) { return !recipeOf(x.p.id).length; });
+  var mNeed = needFor(short.map(function (x) { return { product_id: x.p.id, qty: x.short }; })).filter(function (a) { return a.short > 1e-9; });
+  var can = !noRecipe.length && !mNeed.length;
+  var body = '<div class="callout warn mb">' + ic('alert', 'sm') + '<div>المنتجات الجاهزة في المخزن مش كفاية للطلب ده.</div></div>' +
+    '<div class="card tscroll" style="box-shadow:none"><table class="t"><thead><tr><th>المنتج</th><th class="n">مطلوب</th><th class="n">جاهز</th><th class="n">ناقص</th></tr></thead><tbody>' +
+    short.map(function (x) { return '<tr><td>' + esc(x.p.name) + '</td><td class="n num">' + fmt(x.need, 0) + '</td><td class="n num">' + fmt(x.ready, 0) + '</td><td class="n neg num">' + fmt(x.short, 0) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+  if (can) body += '<div class="callout info mt">' + ic('flame', 'sm') + '<div>تقدر تخلي السيستم يسجّل إنتاج القطع الناقصة دلوقتي (الخامات كفاية وهتتخصم)، وبعدها يأكد الطلب.</div></div>';
+  else if (noRecipe.length) body += '<div class="callout bad mt">' + ic('alert', 'sm') + '<div>' + noRecipe.map(function (x) { return esc(x.p.name); }).join('، ') + ': ملوش وصفة، فمينفعش يتنتج تلقائي.</div></div>';
+  else body += '<div class="callout bad mt">' + ic('alert', 'sm') + '<div>كمان الخامات مش كفاية لإنتاج الناقص:</div></div><div class="card mt" style="box-shadow:none">' + needTable(mNeed) + '</div>';
+  modal({ title: 'القطع الجاهزة مش كفاية', body: body,
+    footer: '<button class="btn btn-ghost" data-act="closeModal">رجوع</button>' + (can ? '<button class="btn btn-primary" id="cfProduce">' + ic('flame', 'sm') + 'إنتاج الناقص وتأكيد</button>' : ''),
+    mount: function () { var b = document.getElementById('cfProduce'); if (b) b.onclick = function () { closeModal(); go2(true); }; } });
+}
+
+/* ----- customer invoice ----- */
+var STAMP = { draft: ['DRAFT', 'مسودة'], confirmed: ['CONFIRMED', 'مؤكد'], delivered: ['DELIVERED', 'تم التسليم'], cancelled: ['CANCELLED', 'ملغي'] };
+function imoney(v) { return '<span class="num">' + fmt(v, 2) + '</span> ج.م'; }
+VIEWS.invoice = function (id) {
+  var o = S.data.orders.find(function (x) { return x.id === id; });
+  if (!o) { topbar('الفاتورة', { back: 'orders' }); return emptyBox('receipt', 'الطلب غير موجود'); }
+  topbar('فاتورة ' + o.order_no, { back: 'order', right: '' });
+  document.querySelector('#topbar [data-act="nav"]').setAttribute('data-p', o.id);
+  var st = STAMP[o.status] || STAMP.draft;
+  var h = '<div class="inv-wrap"><div class="inv-actions">' +
+    '<button class="btn btn-primary" data-act="invShare" data-p="' + esc(o.id) + '">' + ic('copy', 'sm') + 'مشاركة</button>' +
+    '<button class="btn btn-soft" data-act="invSave" data-p="' + esc(o.id) + '">' + ic('image', 'sm') + 'حفظ صورة</button>' +
+    '<button class="btn btn-ghost" data-act="invPrint">' + ic('save', 'sm') + 'طباعة / PDF</button></div>';
+  h += '<div class="invoice" id="invoice"><div class="gold"></div>' +
+    '<div class="inv-head"><img class="inv-logo" src="logo-full.png" alt="Noudella"><div class="inv-brand"><div class="wm">Noudella</div><div class="t">فاتورة</div></div>' +
+    '<div class="stamp s-' + esc(o.status) + '"><i></i><b>' + st[0] + '</b><span>' + st[1] + '</span></div></div>' +
+    '<div class="inv-info"><div><small>التاريخ</small><b>' + fmtDate(o.order_date) + '</b></div><div><small>رقم الفاتورة</small><b class="num">' + esc(o.order_no) + '</b></div><div><small>العميل</small><b>' + esc(o.customer || '—') + '</b></div></div>' +
+    '<table class="t inv-table"><thead><tr><th>المنتج</th><th class="n">الكمية</th><th class="n">سعر القطعة</th><th class="n">الإجمالي</th></tr></thead><tbody>' +
+    o.lines.map(function (l) { return '<tr><td><b>' + esc(l.product_name) + '</b></td><td class="n num">' + fmt(l.qty, 0) + '</td><td class="n">' + imoney(l.unit_price) + '</td><td class="n">' + imoney(n(l.qty) * n(l.unit_price)) + '</td></tr>'; }).join('') +
+    '</tbody></table><div class="inv-sum">' + kv('إجمالي المنتجات', imoney(o.items_revenue)) +
+    (n(o.charges) ? kv('رسوم إضافية', '+ ' + imoney(o.charges)) : '') + (n(o.discount) ? kv('خصم', '− ' + imoney(o.discount)) : '') +
+    '<div class="inv-total' + (o.status === 'cancelled' ? ' void' : '') + '"><span>الإجمالي</span><span>' + imoney(o.revenue) + '</span></div></div>' +
+    '<div class="inv-foot">شكرًا لاختياركم Noudella</div></div></div>';
+  return h;
+};
+var H2C = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+function loadScript(src) {
+  return new Promise(function (res, rej) {
+    if (window.html2canvas) return res();
+    var sc = document.createElement('script'); sc.src = src; sc.onload = function () { res(); }; sc.onerror = function () { rej(new Error('تعذر تجهيز الصورة، تأكد من الإنترنت')); };
+    document.head.appendChild(sc);
+  });
+}
+function invoiceBlob() {
+  var el = document.getElementById('invoice');
+  setBusy(true);
+  return loadScript(H2C).then(function () { return document.fonts && document.fonts.ready; })
+    .then(function () { return html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false }); })
+    .then(function (c) { return new Promise(function (r) { c.toBlob(r, 'image/png'); }); })
+    .then(function (b) { setBusy(false); return b; }, function (e) { setBusy(false); throw e; });
+}
+function downloadBlob(blob, name) {
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+}
+
 VIEWS.order = function (id) {
   var o = S.data.orders.find(function (x) { return x.id === id; });
   if (!o) { topbar('الطلب', { back: 'orders' }); return emptyBox('receipt', 'الطلب غير موجود'); }
@@ -914,16 +1039,21 @@ VIEWS.order = function (id) {
     var lp = n(l.qty) * (n(l.unit_price) - n(l.unit_cost));
     return '<tr><td><b>' + esc(l.product_name) + '</b></td><td class="n num">' + fmt(l.qty) + '</td><td class="n">' + money(l.unit_price) + '</td><td class="n">' + money(l.unit_cost) + '</td><td class="n ' + (lp < 0 ? 'neg' : 'pos') + '">' + money(lp) + '</td></tr>';
   }).join('') + '</tbody></table></div>';
-  if (o.status === 'draft' || o.status === 'confirmed') h += '<div class="sect"><h2>الخامات المطلوبة</h2></div><div class="card">' + needTable(needFor(o.lines)) + '</div>';
+  if (o.status === 'draft') {
+    var sh = orderShortage(o.lines);
+    h += '<div class="sect"><h2>جاهزية المنتجات</h2></div>' + (sh.length ? '<div class="callout warn">' + ic('alert', 'sm') + '<div>ناقص: ' + sh.map(function (x) { return esc(x.p.name) + ' × ' + fmt(x.short, 0); }).join('، ') + ' — تقدر تنتجهم وقت التأكيد.</div></div>'
+      : '<div class="callout ok">' + ic('check', 'sm') + '<div>كل القطع جاهزة في المخزن.</div></div>');
+  }
   h += '</div><div class="sticky"><div class="card pad">' +
     kv('قيمة المنتجات', money(o.items_revenue)) + (n(o.charges) ? kv('رسوم على العميل', '+ ' + money(o.charges)) : '') + (n(o.discount) ? kv('الخصم', '− ' + money(o.discount)) : '') +
     kv('صافي المبيعات', '<b>' + money(o.revenue) + '</b>') + kv('تكلفة المنتجات', '− ' + money(o.product_cost)) +
     (o.extras || []).map(function (e) { return kv(esc(e.label), '− ' + money(e.amount)); }).join('') +
     '<div class="kv total big"><span>' + (o.estimated ? 'الربح المتوقع' : 'الربح') + '</span><span class="' + (n(o.profit) < 0 ? 'neg' : 'pos') + '">' + money(o.profit) + '</span></div>' + kv('هامش الربح', pct(o.margin)) + '</div>';
-  h += '<div class="grid mt" style="gap:10px">';
+  h += '<div class="grid mt" style="gap:10px"><button class="btn btn-soft" data-act="nav" data-v="invoice" data-p="' + esc(o.id) + '">' + ic('receipt', 'sm') + 'الفاتورة</button>';
   if (o.status === 'draft') h += '<button class="btn btn-primary" data-lockable data-act="ordConfirm" data-p="' + esc(o.id) + '">' + ic('check', 'sm') + 'تأكيد الطلب</button><button class="btn btn-soft" data-act="ordEdit" data-p="' + esc(o.id) + '">' + ic('edit', 'sm') + 'تعديل</button><button class="btn btn-ghost" data-lockable data-act="ordStatus2" data-s="cancelled" data-p="' + esc(o.id) + '">' + ic('x', 'sm') + 'إلغاء الطلب</button>';
   if (o.status === 'confirmed') h += '<button class="btn btn-primary" data-lockable data-act="ordStatus2" data-s="delivered" data-p="' + esc(o.id) + '">' + ic('truck', 'sm') + 'تم التسليم</button><button class="btn btn-ghost" data-lockable data-act="ordStatus2" data-s="draft" data-p="' + esc(o.id) + '">' + ic('undo', 'sm') + 'رجوع لمسودة للتعديل</button><button class="btn btn-ghost" data-lockable data-act="ordStatus2" data-s="cancelled" data-p="' + esc(o.id) + '">' + ic('x', 'sm') + 'إلغاء الطلب</button>';
-  if (o.status === 'cancelled') h += '<button class="btn btn-soft" data-lockable data-act="ordStatus2" data-s="draft" data-p="' + esc(o.id) + '">' + ic('undo', 'sm') + 'إرجاع كمسودة</button>';
+  if (o.status === 'delivered') h += '<button class="btn btn-ghost" data-lockable data-act="ordStatus2" data-s="cancelled" data-p="' + esc(o.id) + '">' + ic('x', 'sm') + 'إلغاء الطلب (القطع ترجع المخزن)</button>';
+  if (o.status === 'cancelled') h += '<button class="btn btn-ghost" data-lockable data-act="ordStatus2" data-s="draft" data-p="' + esc(o.id) + '">' + ic('undo', 'sm') + 'إرجاع كمسودة</button>';
   h += '</div></div></div>';
   return h;
 };
@@ -1035,7 +1165,6 @@ var ACT = {
   toggleArchived: function () { S.filters.archived = !S.filters.archived; render(); },
   newProduct: function () { productForm(null); },
   editProduct: function (el) { productForm(prodById(el.getAttribute('data-p'))); },
-  pfRemoveImg: function () { S.pf.removeImage = true; S.pf.image = null; document.getElementById('pf_prev').innerHTML = ic('image'); },
   saveProduct: function () {
     var price = parseIn(val('pf_price')), other = parseIn(val('pf_other'));
     if (isNaN(price) || isNaN(other)) return toast('اكتب الأرقام بشكل صحيح', 'err');
@@ -1081,7 +1210,8 @@ var ACT = {
     var pl = { id: S.mf.id, name: val('mf_name'), kind: S.mf.kind, base_unit: S.mf.base, category: val('mf_cat'), supplier: val('mf_sup'), notes: val('mf_notes'),
       life_units: life === '' ? 0 : life,
       price: (a === '' || (S.mf.id && S.mf.orig === val('mf_amount') + '|' + val('mf_pqty') + '|' + val('mf_punit'))) ? null : { amount: a, qty: pq, unit: val('mf_punit') },
-      min_stock: { qty: mn, unit: val('mf_munit') }, opening: op === '' ? null : { qty: op, unit: val('mf_ounit') } };
+      min_stock: { qty: mn, unit: val('mf_munit') }, opening: op === '' ? null : { qty: op, unit: val('mf_ounit') },
+      image: S.mf.image, removeImage: S.mf.removeImage };
     var after = S.mf.after;
     run('saveMaterial', pl, { rid: S.mf.rid, ok: 'تم حفظ الخامة' }).then(function (r) {
       if (!r) return;
@@ -1157,26 +1287,48 @@ var ACT = {
   odDelExtra: function (el) { odCollect(); S.draft.extras.splice(+el.getAttribute('data-i'), 1); render(); },
   odSave: function () {
     var pl = odPayload(false); if (!pl) return;
-    run('saveOrder', pl, { rid: S.draft.rid, ok: 'تم حفظ المسودة' }).then(function (r) { if (r) { S.draft = null; go('order', r.result.id); } });
+    run('saveOrder', pl, { rid: S.draft.rid, ok: 'تم حفظ الطلب كمسودة' }).then(function (r) { if (r) { S.draft = null; go('invoice', r.result.id); } });
   },
   odConfirm: function () {
     var pl = odPayload(true); if (!pl) return;
-    var t = odTotals(S.draft), d = S.draft;
-    confirmBox('تأكيد الطلب', 'الربح المتوقع ' + money(t.profit) + '. بعد التأكيد الأسعار والتكلفة بتتثبت للطلب ده.', 'تأكيد').then(function (y) {
-      if (!y) return;
-      run('saveOrder', pl, { rid: d.rid, ok: 'تم تأكيد الطلب' }).then(function (r) { if (r) { S.draft = null; go('order', r.result.id); } });
+    var d = S.draft;
+    confirmFlow(pl.lines, function (produce) {
+      pl.produce = produce;
+      run('saveOrder', pl, { rid: d.rid }).then(function (r) {
+        if (!r) return;
+        S.draft = null;
+        if (r.result.confirmError) toast('اتحفظ كمسودة بس متأكدش: ' + r.result.confirmError, 'err'); else toast(produce ? 'اتنتج الناقص واتأكد الطلب' : 'تم تأكيد الطلب', 'ok');
+        go('invoice', r.result.id);
+      });
     });
   },
   ordConfirm: function (el) {
-    var id = el.getAttribute('data-p'), r0 = rid();
-    confirmBox('تأكيد الطلب', 'هيتم تثبيت أسعار وتكلفة الطلب بأسعار النهارده.', 'تأكيد').then(function (y) { if (y) run('confirmOrder', { id: id }, { rid: r0, ok: 'تم تأكيد الطلب' }).then(function (r) { if (r) render(); }); });
+    var id = el.getAttribute('data-p'), o = S.data.orders.find(function (x) { return x.id === id; }), r0 = rid();
+    confirmFlow(o.lines, function (produce) {
+      run('confirmOrder', { id: id, produce: produce }, { rid: r0, ok: produce ? 'اتنتج الناقص واتأكد الطلب' : 'تم تأكيد الطلب' }).then(function (r) { if (r) go('invoice', id); });
+    });
   },
   ordStatus2: function (el) {
     var id = el.getAttribute('data-p'), s = el.getAttribute('data-s'), r0 = rid();
-    var txt = { delivered: ['تم التسليم', 'المنتجات هتتخصم من رصيد المنتجات الجاهزة. الحالة دي نهائية.', 'تم التسليم', false],
-      cancelled: ['إلغاء الطلب', 'الطلب هيتلغي ومش هيتحسب في الأرباح.', 'إلغاء الطلب', true],
-      draft: ['رجوع لمسودة', 'التكلفة المثبتة هتتشال والطلب هيتحسب تاني بأسعار النهارده لما تأكده.', 'رجوع لمسودة', true] }[s];
-    confirmBox(txt[0], txt[1], txt[2], txt[3]).then(function (y) { if (y) run('setOrderStatus', { id: id, status: s }, { rid: r0, ok: 'تم' }).then(function (r) { if (r) render(); }); });
+    var o = S.data.orders.find(function (x) { return x.id === id; });
+    var back = o && (o.status === 'confirmed' || o.status === 'delivered') ? ' القطع هترجع مخزن المنتجات.' : '';
+    var txt = { delivered: ['تم التسليم', 'هيتسجل إن الطلب اتسلم للعميل.', 'تم التسليم', false],
+      cancelled: ['إلغاء الطلب', 'الطلب هيتلغي ومش هيتحسب في الأرباح، والفاتورة هتاخد ختم CANCELLED.' + back, 'إلغاء الطلب', true],
+      draft: ['رجوع لمسودة', 'التكلفة المثبتة هتتشال والطلب هيتحسب تاني بأسعار النهارده لما تأكده.' + back, 'رجوع لمسودة', true] }[s];
+    confirmBox(txt[0], txt[1], txt[2], txt[3]).then(function (y) { if (y) run('setOrderStatus', { id: id, status: s }, { rid: r0, ok: 'تم' }).then(function (r) { if (r) { if (s === 'cancelled') go('invoice', id); else render(); } }); });
+  },
+  invPrint: function () { window.print(); },
+  invSave: function (el) {
+    var o = S.data.orders.find(function (x) { return x.id === el.getAttribute('data-p'); });
+    invoiceBlob().then(function (b) { downloadBlob(b, 'Noudella-' + o.order_no + '.png'); toast('اتحفظت صورة الفاتورة', 'ok'); }).catch(function (e) { toast(e.message, 'err'); });
+  },
+  invShare: function (el) {
+    var o = S.data.orders.find(function (x) { return x.id === el.getAttribute('data-p'); }), name = 'Noudella-' + o.order_no + '.png';
+    invoiceBlob().then(function (b) {
+      var file = new File([b], name, { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) return navigator.share({ files: [file], title: 'Noudella ' + o.order_no }).catch(function () {});
+      downloadBlob(b, name); toast('المشاركة مش متاحة هنا — اتحفظت الصورة بدلها', 'ok');
+    }).catch(function (e) { toast(e.message, 'err'); });
   },
   saveSettings: function () {
     var m = parseIn(val('st_margin')); if (m === '' || isNaN(m) || m < 0 || m >= 95) return toast('الهامش لازم يكون بين 0 و 95', 'err');

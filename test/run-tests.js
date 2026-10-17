@@ -142,38 +142,65 @@ t('mixed order live estimate', () => {
   near(o.profit, Math.round((1080 - (10 * csCost + 5 * joCost) - 30) * 100) / 100, '', 0.011);
 });
 let SNAP;
-t('confirm freezes costs; later price change does not touch it', () => {
-  refresh(ok('confirmOrder', { id: ORDER_ID }).data);
+t('confirm blocked when ready pieces are missing (nothing changes)', () => {
+  const wax0 = WAX.stock;
+  const r = api('confirmOrder', { id: ORDER_ID });
+  assert.ok(!r.ok); assert.strictEqual(r.code, 'PRODUCT_SHORT');
+  assert.ok(r.details.some(d => d.product_id === CS.id && d.short === 10) && r.details.some(d => d.product_id === JORY.id && d.short === 5));
+  refresh(ok('bootstrap').data); near(WAX.stock, wax0); assert.strictEqual(D.orders.find(x => x.id === ORDER_ID).status, 'draft');
+});
+t('confirm + produce: missing pieces are produced, then leave the store', () => {
+  const wax0 = WAX.stock, prod0 = D.production.length;
+  refresh(ok('confirmOrder', { id: ORDER_ID, produce: true }).data);
   const o = D.orders.find(x => x.id === ORDER_ID); SNAP = JSON.parse(JSON.stringify(o));
   assert.strictEqual(o.status, 'confirmed'); assert.ok(!o.estimated);
+  near(WAX.stock, wax0 - 650 - 500, 'materials used for 10 + 5 pieces');
+  near(CS.stock, 0); near(JORY.stock, 0); assert.strictEqual(D.production.length, prod0 + 2);
+  assert.ok(D.movements.some(m => m.type === 'SALE' && m.ref_id === ORDER_ID && m.item_id === CS.id && Number(m.qty) === -10));
+});
+t('later price change does not touch the confirmed order', () => {
   const before = CS.cost.total;
   refresh(ok('savePurchase', { material_id: WAX.id, qty: 1, unit: 'kg', total_price: 2000 }).data); // big price jump
   assert.ok(CS.cost.total > before, 'product cost follows new average');
   const o2 = D.orders.find(x => x.id === ORDER_ID);
-  near(o2.profit, SNAP.profit); near(o2.product_cost, SNAP.product_cost);
-  near(o2.lines[0].unit_cost, SNAP.lines[0].unit_cost);
+  near(o2.profit, SNAP.profit); near(o2.product_cost, SNAP.product_cost); near(o2.lines[0].unit_cost, SNAP.lines[0].unit_cost);
 });
-t('confirmed order cannot be edited; status flow rules', () => {
-  assert.ok(!api('saveOrder', { id: ORDER_ID, lines: [{ product_id: CS.id, qty: 1 }] }).ok);
-  assert.ok(!api('setOrderStatus', { id: ORDER_ID, status: 'confirmed' }).ok);
+t('deliver keeps stock; cancel returns pieces exactly once', () => {
+  assert.ok(!api('saveOrder', { id: ORDER_ID, lines: [{ product_id: CS.id, qty: 1 }] }).ok, 'confirmed cannot be edited');
   refresh(ok('setOrderStatus', { id: ORDER_ID, status: 'delivered' }).data);
-  near(byName(D.products, 'شمعة الشمعدان').stock, -10, 'delivery takes finished goods');
-  assert.ok(!api('setOrderStatus', { id: ORDER_ID, status: 'cancelled' }).ok, 'delivered is final');
+  near(CS.stock, 0); near(JORY.stock, 0);
+  refresh(ok('setOrderStatus', { id: ORDER_ID, status: 'cancelled' }).data);
+  near(CS.stock, 10); near(JORY.stock, 5);
+  assert.ok(!api('setOrderStatus', { id: ORDER_ID, status: 'cancelled' }).ok, 'no double cancel');
+  refresh(ok('setOrderStatus', { id: ORDER_ID, status: 'draft' }).data);
+  near(CS.stock, 10, 'reopening a cancelled order does not return twice');
+});
+t('material shortage blocks auto-production and keeps the draft', () => {
+  const wax0 = WAX.stock, cs0 = CS.stock, n0 = D.orders.length;
+  const r = ok('saveOrder', { lines: [{ product_id: CS.id, qty: 1000, unit_price: 80 }], confirm: true, produce: true });
+  assert.strictEqual(r.result.code, 'MATERIAL_SHORT'); assert.ok(r.result.details.some(d => d.material_id === WAX.id));
+  refresh(r.data); assert.strictEqual(D.orders.length, n0 + 1);
+  assert.strictEqual(D.orders.find(x => x.id === r.result.id).status, 'draft'); near(WAX.stock, wax0); near(CS.stock, cs0);
 });
 t('empty order and invalid values rejected', () => {
   assert.ok(!api('saveOrder', { lines: [] }).ok);
   assert.ok(!api('saveOrder', { lines: [{ product_id: CS.id, qty: 0 }] }).ok);
+  assert.ok(!api('saveOrder', { lines: [{ product_id: CS.id, qty: 1.5 }] }).ok, 'whole pieces only');
   assert.ok(!api('saveOrder', { lines: [{ product_id: CS.id, qty: 1 }], discount: -5 }).ok);
   assert.ok(!api('saveOrder', { lines: [{ product_id: 'nope', qty: 1 }] }).ok);
 });
-t('zero-price gift order works (margin null)', () => {
+t('zero-price gift order from stock (margin null)', () => {
   const r = ok('saveOrder', { lines: [{ product_id: CS.id, qty: 2, unit_price: 0 }], confirm: true });
-  const o = r.data.orders.find(x => x.id === r.result.id);
+  assert.ok(!r.result.confirmError); refresh(r.data);
+  const o = D.orders.find(x => x.id === r.result.id);
   assert.strictEqual(o.status, 'confirmed'); assert.ok(o.margin === '' || o.margin === null); assert.ok(o.profit < 0);
+  near(CS.stock, 8);
 });
-t('reopen to draft gives live estimate again', () => {
+t('reopen confirmed → draft returns pieces and gives live estimate', () => {
   const r = ok('saveOrder', { lines: [{ product_id: CS.id, qty: 1, unit_price: 80 }], confirm: true });
+  refresh(r.data); near(CS.stock, 7);
   refresh(ok('setOrderStatus', { id: r.result.id, status: 'draft' }).data);
+  near(CS.stock, 8);
   const o = D.orders.find(x => x.id === r.result.id); assert.ok(o.estimated); near(o.product_cost, Math.round(CS.cost.total * 100) / 100);
 });
 
@@ -182,19 +209,35 @@ t('shortage blocks production and lists materials', () => {
   const r = api('recordProduction', { product_id: CS.id, qty: 1000 });
   assert.ok(!r.ok); assert.ok(r.details && r.details.some(d => d.material_id === WAX.id));
 });
+let BATCH;
 t('production consumes exact materials once (tools not consumed)', () => {
-  const wax0 = WAX.stock, wick0 = WICK.stock, col0 = COLOR.stock, box0 = BOX.stock, mold0 = MOLD.stock;
+  refresh(ok('savePurchase', { material_id: COLOR.id, qty: 100, unit: 'ml', total_price: 350 }).data);
+  const wax0 = WAX.stock, wick0 = WICK.stock, col0 = COLOR.stock, box0 = BOX.stock, mold0 = MOLD.stock, cs0 = CS.stock, n0 = D.production.length;
   refresh(ok('recordProduction', { product_id: CS.id, qty: 10 }, 'prod-1').data);
   refresh(ok('recordProduction', { product_id: CS.id, qty: 10 }, 'prod-1').data); // double click
   near(WAX.stock, wax0 - 650); near(WICK.stock, wick0 - 250); near(COLOR.stock, col0 - 10); near(BOX.stock, box0 - 10);
   near(MOLD.stock, mold0, 'mold not consumed');
-  assert.strictEqual(D.production.length, 1); near(CS.stock, 0);
+  assert.strictEqual(D.production.length, n0 + 1); near(CS.stock, cs0 + 10); BATCH = D.production[0];
 });
 t('reverse production restores stock', () => {
-  const wax0 = WAX.stock;
-  refresh(ok('reverseProduction', { id: D.production[0].id }).data);
-  near(WAX.stock, wax0 + 650); near(CS.stock, -10);
-  assert.ok(!api('reverseProduction', { id: D.production[0].id }).ok);
+  const wax0 = WAX.stock, cs0 = CS.stock;
+  refresh(ok('reverseProduction', { id: BATCH.id }).data);
+  near(WAX.stock, wax0 + 650); near(CS.stock, cs0 - 10);
+  assert.ok(!api('reverseProduction', { id: BATCH.id }).ok);
+});
+t('material photo saved and served', () => {
+  refresh(ok('saveMaterial', { id: WAX.id, name: WAX.name, kind: 'raw', image: { mime: 'image/jpeg', data: Buffer.from('fakejpeg').toString('base64') } }).data);
+  assert.ok(WAX.image_id && /lh3\.googleusercontent\.com\/d\//.test(WAX.image_url));
+  refresh(ok('saveMaterial', { id: WAX.id, name: WAX.name, kind: 'raw', removeImage: true }).data);
+  assert.ok(!WAX.image_id && !WAX.image_url);
+});
+t('migration marks old delivered orders as already out', () => {
+  const sh = G._spreadsheets[G._props.DB_ID].getSheetByName('Orders');
+  const head = sh.grid[0], col = head.indexOf('stock_out'), st = head.indexOf('status');
+  const row = sh.grid.findIndex((r, i) => i > 0 && r[st] === 'confirmed');
+  sh.grid[row][col] = ''; sh.grid[row][st] = 'delivered';
+  G.setup();
+  assert.strictEqual(sh.grid[row][col], true);
 });
 
 console.log('\nSafety');

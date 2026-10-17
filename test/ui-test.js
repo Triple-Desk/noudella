@@ -78,7 +78,8 @@ const assert = (c, m) => { if (!c) throw new Error(m); };
     const d = gapi('bootstrap').data;
     assert(d.purchases.length === 1, 'double submit created ' + d.purchases.length);
   });
-  await step('order editor live totals and confirm', async () => {
+  let ORD;
+  await step('order editor: live totals, shortage modal, save draft → invoice', async () => {
     click('[data-act=nav][data-v=orders]'); click('[data-act=newOrder]');
     click('[data-act=odAddLine]');
     const cs = gapi('bootstrap').data.products.find(p => p.name === 'شمعة الشمعدان');
@@ -86,22 +87,41 @@ const assert = (c, m) => { if (!c) throw new Error(m); };
     assert($('input[data-od-line="0"][data-f="unit_price"]').value === '80', 'price autofill');
     setv('input[data-od-line="0"][data-f="qty"]', '10');
     click('[data-act=odAddExtra]'); setv('input[data-od-extra="0"][data-f="label"]', 'توصيل'); setv('input[data-od-extra="0"][data-f="amount"]', '30');
-    const sum = $('#od_sum').textContent;
-    assert(sum.includes('800'), 'revenue missing ' + sum);
-    assert($('#od_need').textContent.includes('ناقص'), 'wick shortage should show');
-    click('[data-act=odConfirm]'); await sleep(5); click('[data-act=cfYes]'); await sleep(40);
-    assert(text().includes('مؤكد'), 'not confirmed: ' + text().slice(0, 200));
+    assert($('#od_sum').textContent.includes('800'), 'revenue missing');
+    assert($('#odcalc0').textContent.includes('هيتنتج الناقص'), 'ready-stock warning missing');
+    click('[data-act=odConfirm]'); await sleep(5);
+    assert($('.sheet h3').textContent.includes('القطع الجاهزة مش كفاية'), 'shortage modal missing');
+    assert(!$('#cfProduce'), 'wick is short, produce must not be offered');
+    click('[data-act=closeModal]'); click('[data-act=odSave]'); await sleep(40);
+    assert($('#invoice'), 'invoice not shown after save');
+    assert($('#invoice .stamp').textContent.includes('DRAFT'), 'draft stamp');
+    assert(!$('#invoice').textContent.includes('تكلفة'), 'invoice must not show costs');
+    ORD = gapi('bootstrap').data.orders[0];
   });
-  await step('production blocked by shortage, then OK after purchase', async () => {
-    click('[data-act=nav][data-v=production]');
-    const d = gapi('bootstrap').data, cs = d.products.find(p => p.name === 'شمعة الشمعدان');
-    setv('#pr_prod', cs.id, 'change'); setv('#pr_qty', '10');
-    assert($('#pr_btn').disabled, 'button should be disabled on shortage');
-    const wick = d.materials.find(m => m.name === 'فتيل قطن'), color = d.materials.find(m => m.name === 'لون سائل');
+  await step('confirm with auto-production → CONFIRMED stamp, pieces leave store', async () => {
+    const d = gapi('bootstrap').data;
+    const wick = d.materials.find(m => m.name === 'فتيل قطن');
     gapi('savePurchase', { material_id: wick.id, qty: 60, unit: 'm', total_price: 300 }, 'x1');
-    gapi('savePurchase', { material_id: color.id, qty: 100, unit: 'ml', total_price: 350 }, 'x2');
-    click('[data-act=nav][data-v=dashboard]'); click('[data-act=nav][data-v=production]');
-    await sleep(5);
+    await w.api('bootstrap');
+    click('[data-act=nav][data-v=orders]'); click($$('.li').find(l => l.getAttribute('data-p') === ORD.id));
+    click('[data-act=ordConfirm]'); await sleep(5);
+    assert($('#cfProduce'), 'produce option expected'); click('#cfProduce'); await sleep(40);
+    assert($('#invoice .stamp').textContent.includes('CONFIRMED'), 'confirmed stamp: ' + ($('#invoice .stamp') || {}).textContent);
+    const d2 = gapi('bootstrap').data, cs = d2.products.find(p => p.name === 'شمعة الشمعدان');
+    assert(Number(cs.stock) === 0 && d2.production.length === 1, 'stock ' + cs.stock + ' batches ' + d2.production.length);
+  });
+  await step('cancel returns pieces and invoice gets CANCELLED stamp', async () => {
+    click('[data-act=nav][data-v=orders]'); click($$('.li').find(l => l.getAttribute('data-p') === ORD.id));
+    click('[data-act=ordStatus2][data-s=cancelled]'); await sleep(5); click('[data-act=cfYes]'); await sleep(40);
+    assert($('#invoice .stamp').textContent.includes('CANCELLED'), 'cancelled stamp');
+    const cs = gapi('bootstrap').data.products.find(p => p.name === 'شمعة الشمعدان');
+    assert(Number(cs.stock) === 10, 'stock back to 10, got ' + cs.stock);
+  });
+  await step('product card shows ready stock; material form has photo field', async () => {
+    click('[data-act=nav][data-v=products]');
+    assert(text().includes('في المخزن'), 'stock line missing');
+    click('[data-act=nav][data-v=materials]'); click('[data-act=newMaterial]');
+    assert($('#mf_img') && $('#mf_prev'), 'material photo field missing'); click('[data-act=closeModal]');
   });
   await step('config remembered on device', () => { assert(JSON.parse(w.localStorage.getItem('noudella_cfg')).k === KEY, 'not saved'); });
   await step('no runtime errors', () => { assert(!errors.length, errors.join('\n')); });

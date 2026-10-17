@@ -13,19 +13,19 @@ var APP = {
   TZ: 'Africa/Cairo',
   KEEP_BACKUPS: 30,
   MAX_WRITES_PER_MIN: 90,
-  VERSION: '1.1.0'
+  VERSION: '1.2.0'
 };
 
 var SCHEMA = {
   Settings:   ['key', 'value'],
   Materials:  ['id', 'name', 'category', 'kind', 'base_unit', 'stock', 'avg_cost', 'min_stock', 'life_units',
-               'supplier', 'notes', 'active', 'created_at', 'updated_at'],
+               'supplier', 'notes', 'active', 'created_at', 'updated_at', 'image_id'],
   Products:   ['id', 'name', 'category', 'selling_price', 'other_cost', 'other_cost_label', 'image_id', 'stock',
                'notes', 'active', 'created_at', 'updated_at'],
   Recipes:    ['id', 'product_id', 'material_id', 'qty_base', 'input_qty', 'input_unit', 'notes', 'created_at', 'updated_at'],
   Orders:     ['id', 'order_no', 'order_date', 'customer', 'status', 'discount', 'charges', 'extras_json', 'notes',
                'items_revenue', 'revenue', 'product_cost', 'extra_cost', 'profit', 'margin',
-               'confirmed_at', 'delivered_at', 'created_at', 'updated_at'],
+               'confirmed_at', 'delivered_at', 'created_at', 'updated_at', 'stock_out'],
   OrderLines: ['id', 'order_id', 'product_id', 'product_name', 'qty', 'unit_price', 'unit_cost', 'raw_cost',
                'packaging_cost', 'tool_cost', 'other_cost', 'line_revenue', 'line_cost', 'created_at'],
   Purchases:  ['id', 'purchase_date', 'material_id', 'material_name', 'input_qty', 'input_unit', 'qty_base',
@@ -97,7 +97,7 @@ function apiCall_(req) {
     }
   } catch (e) {
     console.error(action, e && e.stack || e);
-    return { ok: false, error: (e && e.message) || String(e), details: e && e.details || null };
+    return { ok: false, error: (e && e.message) || String(e), details: e && e.details || null, code: e && e.code || '' };
   }
 }
 
@@ -113,7 +113,7 @@ var WRITE_ACTIONS_ = {
   saveRecipeLine: function (p) { return saveRecipeLine_(p); },
   deleteRecipeLine: function (p) { return deleteRecipeLine_(p); },
   saveOrder: function (p) { return saveOrder_(p); },
-  confirmOrder: function (p) { return confirmOrder_(p.id); },
+  confirmOrder: function (p) { return confirmOrder_(p.id, { produce: p.produce === true }); },
   setOrderStatus: function (p) { return setOrderStatus_(p); },
   recordProduction: function (p) { return recordProduction_(p); },
   reverseProduction: function (p) { return reverseProduction_(p); },
@@ -130,7 +130,7 @@ function setup() {
   console.log('NOUDELLA_KEY=' + props.getProperty('API_KEY'));
   var existing = props.getProperty('DB_ID');
   if (existing) {
-    try { SpreadsheetApp.openById(existing); ensureSheets_(SpreadsheetApp.openById(existing)); installTrigger_();
+    try { _DB = SpreadsheetApp.openById(existing); ensureSheets_(_DB); resetCache_(); migrate_(); installTrigger_();
           return 'Already set up: ' + existing; } catch (e) { /* fall through and recreate only if the file is gone */ }
   }
   var folder = getOrCreateFolder_(DriveApp.getRootFolder(), APP.FOLDER);
@@ -196,7 +196,7 @@ function ensureSheets_(ss) {
         .setFontWeight('bold').setBackground('#6D1833').setFontColor('#FFFFFF');
       sh.setFrozenRows(1);
       cols.forEach(function (c, i) {
-        if (!NUMERIC_COLS[c] && name !== 'Settings' && c !== 'active') {
+        if (!NUMERIC_COLS[c] && name !== 'Settings' && c !== 'active' && c !== 'stock_out') {
           sh.getRange(2, i + 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');
         }
       });
@@ -208,7 +208,7 @@ function ensureSheets_(ss) {
           var next = sh.getLastColumn() + 1;
           if (next > sh.getMaxColumns()) sh.insertColumnsAfter(sh.getMaxColumns(), 1);
           sh.getRange(1, next).setValue(c).setFontWeight('bold').setBackground('#6D1833').setFontColor('#FFFFFF');
-          if (!NUMERIC_COLS[c]) sh.getRange(2, next, sh.getMaxRows() - 1, 1).setNumberFormat('@');
+          if (!NUMERIC_COLS[c] && c !== 'active' && c !== 'stock_out') sh.getRange(2, next, sh.getMaxRows() - 1, 1).setNumberFormat('@');
           head.push(c);
         }
       });
@@ -421,6 +421,8 @@ function saveMaterial_(p) {
     var pq = vNum_(p.price.qty, 'كمية السعر', { gt: 0, max: 1e9 });
     newAvg = pricePerBase_(amount, pq, vUnit_(p.price.unit, baseUnit), baseUnit);
   }
+  if (p.image && p.image.data) rec.image_id = saveImage_(p.image, 'MAT ' + name);
+  if (p.removeImage) rec.image_id = '';
   if (isNew) {
     rec.id = newId_('MAT'); rec.base_unit = baseUnit; rec.active = true; rec.created_at = now_();
     rec.avg_cost = newAvg === null ? 0 : newAvg;
@@ -544,6 +546,10 @@ function saveProduct_(p) {
   return { id: cur.id };
 }
 
+function imageUrl_(id) {
+  return id ? 'https://lh3.googleusercontent.com/d/' + encodeURIComponent(id) + '=w800' : '';
+}
+
 function saveImage_(img, name) {
   var mime = vEnum_(String(img.mime || ''), ['image/jpeg', 'image/png', 'image/webp'], 'الصورة');
   var data = String(img.data);
@@ -619,8 +625,8 @@ function costOf_(productRow, ctx) {
 var ORDER_FLOW_ = {
   draft: ['confirmed', 'cancelled'],
   confirmed: ['delivered', 'cancelled', 'draft'],
-  cancelled: ['draft'],
-  delivered: []
+  delivered: ['cancelled'],
+  cancelled: ['draft']
 };
 
 function parseOrderInput_(p) {
@@ -630,7 +636,7 @@ function parseOrderInput_(p) {
   var parsed = lines.map(function (l, i) {
     var prod = must_('Products', l.product_id, 'المنتج في السطر ' + (i + 1));
     return { product: prod,
-             qty: vNum_(l.qty, 'الكمية في السطر ' + (i + 1), { gt: 0, max: 1e6, required: true }),
+             qty: vNum_(l.qty, 'الكمية في السطر ' + (i + 1), { gt: 0, max: 1e6, int: true, required: true }),
              unit_price: vNum_(l.unit_price, 'السعر في السطر ' + (i + 1), { min: 0, max: 1e8, dflt: num_(prod.selling_price) }) };
   });
   var extras = (Array.isArray(p.extras) ? p.extras : []).slice(0, 15).map(function (e, i) {
@@ -691,7 +697,10 @@ function saveOrder_(p) {
   }
   insert_('OrderLines', lines);
   log_(isNew ? 'create' : 'update', 'Order', id, (rec.order_no || order.order_no) + ' ' + tot.revenue);
-  if (p.confirm) confirmOrder_(id);
+  if (p.confirm) {
+    try { confirmOrder_(id, { produce: p.produce === true }); }
+    catch (e) { return { id: id, confirmError: e.message, code: e.code || '', details: e.details || null }; }
+  }
   return { id: id };
 }
 
@@ -703,13 +712,75 @@ function deleteOrderLines_(orderId) {
   delete _T['OrderLines'];
 }
 
-/** Freeze prices & costs at confirmation time. Later price changes never touch this order. */
-function confirmOrder_(id) {
+/** Quantity of each product in an order: [{product, qty}] */
+function orderProductQty_(orderId) {
+  var acc = {}, order = [];
+  rows_('OrderLines').filter(function (l) { return l.order_id === orderId; }).forEach(function (l) {
+    if (!acc[l.product_id]) { acc[l.product_id] = { product_id: l.product_id, name: l.product_name, qty: 0 }; order.push(acc[l.product_id]); }
+    acc[l.product_id].qty += num_(l.qty);
+  });
+  return order;
+}
+
+/** Ready products missing for an order: [{product_id, name, need, stock, short}] */
+function productShortage_(orderId) {
+  return orderProductQty_(orderId).map(function (x) {
+    var prod = find_('Products', x.product_id);
+    var stock = prod ? num_(prod.stock) : 0;
+    return { product_id: x.product_id, name: prod ? prod.name : x.name, need: x.qty, stock: stock,
+             short: Math.max(0, x.qty - Math.max(0, stock)) };
+  }).filter(function (x) { return x.short > 0; });
+}
+
+/** Ready products leave (sign = -1) or come back to (sign = +1) the products store for an order. */
+function moveOrderStock_(order, sign, type) {
+  orderProductQty_(order.id).forEach(function (x) {
+    var prod = find_('Products', x.product_id);
+    if (!prod) return;
+    var after = num_(prod.stock) + sign * x.qty;
+    update_('Products', prod.id, { stock: after, updated_at: now_() });
+    movement_({ item_type: 'product', item_id: prod.id, item_name: prod.name, type: type, qty: sign * x.qty,
+                unit_cost: costOf_(prod, costContext_()).total, stock_after: after, ref_type: 'order', ref_id: order.id,
+                notes: order.order_no });
+  });
+  update_('Orders', order.id, { stock_out: sign < 0 });
+}
+
+/**
+ * Confirm = the sale happens: prices & costs are frozen (later price changes never touch it) and the
+ * sold pieces leave the products store. If pieces are missing, nothing changes unless opts.produce is
+ * true — then the missing pieces are produced first (materials are checked for ALL of them before
+ * anything is written).
+ */
+function confirmOrder_(id, opts) {
+  opts = opts || {};
   var order = must_('Orders', id, 'الطلب');
   if (order.status !== 'draft') throw new Error('الطلب ليس مسودة');
-  var ctx = costContext_();
   var lines = rows_('OrderLines').filter(function (l) { return l.order_id === id; });
   if (!lines.length) throw new Error('الطلب فارغ');
+
+  var short = productShortage_(id);
+  if (short.length && !opts.produce) {
+    var e1 = new Error('المنتجات الجاهزة في المخزن مش كفاية للطلب');
+    e1.code = 'PRODUCT_SHORT'; e1.details = short; throw e1;
+  }
+  if (short.length) {
+    var ctx0 = costContext_();
+    short.forEach(function (x) {
+      if (!(ctx0.byProd[x.product_id] || []).length) throw new Error('"' + x.name + '" ملوش وصفة، مينفعش يتنتج تلقائي');
+    });
+    var needM = requiredMaterials_(short.map(function (x) { return { product_id: x.product_id, qty: x.short }; }), ctx0.byProd, ctx0.mById)
+      .filter(function (n) { return n.short > 1e-9; });
+    if (needM.length) {
+      var e2 = new Error('الخامات مش كفاية لإنتاج القطع الناقصة');
+      e2.code = 'MATERIAL_SHORT'; e2.details = needM; throw e2;
+    }
+    short.forEach(function (x) {
+      recordProduction_({ product_id: x.product_id, qty: x.short, notes: 'إنتاج لطلب ' + order.order_no });
+    });
+  }
+
+  var ctx = costContext_();
   var forTotals = [];
   lines.forEach(function (l) {
     var prod = find_('Products', l.product_id);
@@ -724,36 +795,42 @@ function confirmOrder_(id) {
   update_('Orders', id, { status: 'confirmed', confirmed_at: now_(), items_revenue: tot.items_revenue,
     revenue: tot.revenue, product_cost: tot.product_cost, extra_cost: tot.extra_cost, profit: tot.profit,
     margin: tot.margin === null ? '' : tot.margin, updated_at: now_() });
+  moveOrderStock_(order, -1, 'SALE');
   log_('confirm', 'Order', id, order.order_no + ' ربح ' + tot.profit);
-  return { id: id };
+  return { id: id, produced: short };
 }
+
+function isTrue_(v) { return v === true || v === 'TRUE' || v === 'true'; }
 
 function setOrderStatus_(p) {
   var order = must_('Orders', p.id, 'الطلب');
   var to = String(p.status || '');
   if ((ORDER_FLOW_[order.status] || []).indexOf(to) === -1) throw new Error('لا يمكن تغيير حالة الطلب بهذا الشكل');
-  if (to === 'confirmed') return confirmOrder_(order.id);
+  if (to === 'confirmed') return confirmOrder_(order.id, { produce: p.produce === true });
+  // Cancelled or re-opened: pieces that left the store come back (only once, guarded by stock_out).
+  if ((to === 'cancelled' || to === 'draft') && isTrue_(order.stock_out)) moveOrderStock_(order, +1, 'SALE_RETURN');
   var patch = { status: to, updated_at: now_() };
   if (to === 'draft') {                        // re-open: snapshot is cleared, costs become live estimates again
     patch.confirmed_at = '';
+    patch.delivered_at = '';
     rows_('OrderLines').filter(function (l) { return l.order_id === order.id; }).forEach(function (l) {
       update_('OrderLines', l.id, { unit_cost: '', raw_cost: '', packaging_cost: '', tool_cost: '', other_cost: '', line_cost: '' });
     });
   }
-  if (to === 'delivered') {                    // finished goods leave the shop
-    patch.delivered_at = now_();
-    rows_('OrderLines').filter(function (l) { return l.order_id === order.id; }).forEach(function (l) {
-      var prod = find_('Products', l.product_id);
-      if (!prod) return;
-      var after = num_(prod.stock) - num_(l.qty);
-      update_('Products', prod.id, { stock: after });
-      movement_({ item_type: 'product', item_id: prod.id, item_name: prod.name, type: 'SALE', qty: -num_(l.qty),
-                  unit_cost: l.unit_cost, stock_after: after, ref_type: 'order', ref_id: order.id, notes: order.order_no });
-    });
-  }
+  if (to === 'delivered') patch.delivered_at = now_();
   update_('Orders', order.id, patch);
   log_('status', 'Order', order.id, order.order_no + ' → ' + to);
   return { id: order.id };
+}
+
+/** One-time data fixes after upgrades (safe to run many times). */
+function migrate_() {
+  // v1.2.0: before this version stock left the store at delivery; mark those orders as already out.
+  rows_('Orders').forEach(function (o) {
+    if (o.stock_out === '' || o.stock_out === null || o.stock_out === undefined) {
+      update_('Orders', o.id, { stock_out: o.status === 'delivered' });
+    }
+  });
 }
 
 function safeJson_(s, dflt) { try { return s ? JSON.parse(s) : dflt; } catch (e) { return dflt; } }
@@ -841,14 +918,14 @@ function pub_(r) {
 
 function bootstrap_() {
   var ctx = costContext_();
-  var materials = rows_('Materials').map(pub_);
+  var materials = rows_('Materials').map(function (r) { var o = pub_(r); o.image_url = imageUrl_(r.image_id); return o; });
   var recipes = rows_('Recipes').map(pub_);
   var prodCost = {};
   var products = rows_('Products').map(function (r) {
     var o = pub_(r);
     o.cost = costOf_(r, ctx);
     prodCost[r.id] = o.cost;
-    o.image_url = r.image_id ? 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(r.image_id) + '&sz=w800' : '';
+    o.image_url = imageUrl_(r.image_id);
     return o;
   });
   var linesByOrder = {};
