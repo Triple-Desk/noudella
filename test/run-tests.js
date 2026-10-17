@@ -211,6 +211,12 @@ t('customer phone saved; invalid phone rejected', () => {
   const r2 = ok('saveOrder', { customer: 'x', customer_phone: '٠١٠١٢٣٤٥٦٧٨', lines: [{ product_id: JORY.id, qty: 1 }] });
   assert.strictEqual(r2.data.orders.find(x => x.id === r2.result.id).customer_phone, '01012345678', 'arabic digits normalised');
 });
+t('customer details editable at any status', () => {
+  const o = D.orders.find(x => x.status === 'confirmed');
+  refresh(ok('setOrderCustomer', { id: o.id, customer: 'هدى', customer_phone: '01100000000' }).data);
+  const o2 = D.orders.find(x => x.id === o.id); assert.strictEqual(o2.customer_phone, '01100000000'); assert.strictEqual(o2.status, 'confirmed');
+  assert.ok(!api('setOrderCustomer', { id: o.id, customer_phone: 'x1' }).ok);
+});
 t('invoice PDF stored per order (replaced, not duplicated); junk refused', () => {
   const o = D.orders[0];
   const pdf = Buffer.from('%PDF-1.4 test').toString('base64');

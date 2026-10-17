@@ -13,7 +13,7 @@ var APP = {
   TZ: 'Africa/Cairo',
   KEEP_BACKUPS: 30,
   MAX_WRITES_PER_MIN: 90,
-  VERSION: '1.3.0'
+  VERSION: '1.3.1'
 };
 
 var SCHEMA = {
@@ -120,7 +120,8 @@ var WRITE_ACTIONS_ = {
   reverseProduction: function (p) { return reverseProduction_(p); },
   saveSettings: function (p) { return saveSettings_(p); },
   backupNow: function () { return backupNow_(false); },
-  saveInvoicePdf: function (p) { return saveInvoicePdf_(p); }
+  saveInvoicePdf: function (p) { return saveInvoicePdf_(p); },
+  setOrderCustomer: function (p) { return setOrderCustomer_(p); }
 };
 
 /* =========================== Setup & backups =========================== */
@@ -181,6 +182,16 @@ function backupNow_(isDaily) {
 function installTrigger_() {
   var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'dailyBackup'; });
   if (!has) ScriptApp.newTrigger('dailyBackup').timeBased().everyDays(1).atHour(3).create();
+}
+
+/** Customer name/phone can be corrected at any status (no effect on money or stock). */
+function setOrderCustomer_(p) {
+  var order = must_('Orders', p.id, 'الطلب');
+  var patch = { customer: vStr_(p.customer, 'اسم العميل', 60, false), customer_phone: vPhone_(p.customer_phone), updated_at: now_() };
+  patch.invoice_status = '';                    // the PDF shows name & phone → rebuild it next time
+  update_('Orders', order.id, patch);
+  log_('update', 'Order', order.id, order.order_no + ' customer');
+  return { id: order.id };
 }
 
 /** Stores the customer invoice PDF (made in the browser) in Drive, shared view-by-link, one file per order. */

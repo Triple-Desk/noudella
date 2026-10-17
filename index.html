@@ -993,6 +993,23 @@ function confirmFlow(lines, go2) {
     mount: function () { var b = document.getElementById('cfProduce'); if (b) b.onclick = function () { closeModal(); go2(true); }; } });
 }
 
+/* ----- customer name / phone (editable at any status) ----- */
+function customerForm(o, thenWhatsApp) {
+  var r0 = rid();
+  modal({ title: 'بيانات العميل', body:
+    '<div class="field"><label>اسم العميل</label><input class="inp" id="cu_name" maxlength="60" value="' + esc(o.customer) + '"></div>' +
+    '<div class="field"><label>رقم تليفون العميل (واتساب)</label><input class="inp ltr" type="tel" inputmode="tel" id="cu_phone" maxlength="25" value="' + esc(o.customer_phone) + '" placeholder="01xxxxxxxxx"></div>',
+    footer: '<button class="btn btn-ghost" data-act="closeModal">إلغاء</button><button class="btn btn-primary" data-lockable id="cuSave">' + ic('save', 'sm') + 'حفظ</button>',
+    mount: function () {
+      document.getElementById('cuSave').onclick = function () {
+        run('setOrderCustomer', { id: o.id, customer: val('cu_name'), customer_phone: val('cu_phone') }, { rid: r0, ok: 'اتحفظت بيانات العميل' }).then(function (r) {
+          if (!r) return; closeModal(); render();
+          if (thenWhatsApp && val('cu_phone') !== '') { var b = document.querySelector('[data-act="invWhatsApp"]'); if (b) ACT.invWhatsApp(b); }
+        });
+      };
+    } });
+}
+
 /* ----- customer invoice ----- */
 var STAMP = { draft: ['DRAFT', 'مسودة'], confirmed: ['CONFIRMED', 'مؤكد'], delivered: ['DELIVERED', 'تم التسليم'], cancelled: ['CANCELLED', 'ملغي'] };
 function imoney(v) { return '<span class="num">' + fmt(v, 2) + '</span> ج.م'; }
@@ -1083,7 +1100,7 @@ VIEWS.order = function (id) {
   var st = STATUS[o.status];
   topbar('طلب ' + o.order_no, { back: 'orders' });
   var h = '<div class="split"><div>';
-  h += '<div class="card pad"><div class="between"><div><div style="font-size:19px;font-weight:700">' + esc(o.customer || 'بدون اسم') + '</div>' + (o.customer_phone ? '<a class="num" style="font-weight:600" href="tel:' + esc(String(o.customer_phone).replace(/[^0-9+]/g, '')) + '">' + esc(o.customer_phone) + '</a>' : '') + '<div class="faint">' + fmtDate(o.order_date) + ' · ' + esc(o.order_no) + '</div></div><span class="badge ' + st[1] + '">' + st[0] + '</span></div>' +
+  h += '<div class="card pad"><div class="between"><div><div style="font-size:19px;font-weight:700">' + esc(o.customer || 'بدون اسم') + ' <button class="link" style="font-size:13px" data-act="editCustomer" data-p="' + esc(o.id) + '">تعديل</button></div>' + (o.customer_phone ? '<a class="num" style="font-weight:600" href="tel:' + esc(String(o.customer_phone).replace(/[^0-9+]/g, '')) + '">' + esc(o.customer_phone) + '</a>' : '') + '<div class="faint">' + fmtDate(o.order_date) + ' · ' + esc(o.order_no) + '</div></div><span class="badge ' + st[1] + '">' + st[0] + '</span></div>' +
     (o.notes ? '<div class="muted mt">' + esc(o.notes) + '</div>' : '') +
     (o.estimated ? '<div class="callout warn mt">' + ic('clock', 'sm') + '<div>الطلب لسه مسودة — الأرقام تقديرية بأسعار الخامات النهارده.</div></div>'
       : (o.confirmed_at ? '<div class="callout ok mt">' + ic('shield', 'sm') + '<div>الأسعار والتكلفة متثبتة من وقت التأكيد (' + fmtDate(o.confirmed_at) + ').</div></div>' : '')) + '</div>';
@@ -1370,9 +1387,10 @@ var ACT = {
     confirmBox(txt[0], txt[1], txt[2], txt[3]).then(function (y) { if (y) run('setOrderStatus', { id: id, status: s }, { rid: r0, ok: 'تم' }).then(function (r) { if (r) { if (s === 'cancelled') go('invoice', id); else render(); } }); });
   },
   invPrint: function () { window.print(); },
+  editCustomer: function (el) { customerForm(S.data.orders.find(function (x) { return x.id === el.getAttribute('data-p'); }), false); },
   invWhatsApp: function (el) {
     var o = S.data.orders.find(function (x) { return x.id === el.getAttribute('data-p'); });
-    if (!o.customer_phone) { toast('ضيف رقم تليفون العميل في الطلب الأول', 'err'); startOrder(o); return; }
+    if (!o.customer_phone) { customerForm(o, true); return; }
     if (waNumber(o.customer_phone).length < 8) { toast('رقم التليفون مش واضح، راجعه في الطلب', 'err'); return; }
     if (o.invoice_url && o.invoice_status === o.status) { window.open(waLink(o, o.invoice_url), '_blank'); return; }
     var r0 = rid();
