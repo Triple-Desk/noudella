@@ -13,7 +13,7 @@ var APP = {
   TZ: 'Africa/Cairo',
   KEEP_BACKUPS: 30,
   MAX_WRITES_PER_MIN: 90,
-  VERSION: '1.2.0'
+  VERSION: '1.3.0'
 };
 
 var SCHEMA = {
@@ -25,7 +25,8 @@ var SCHEMA = {
   Recipes:    ['id', 'product_id', 'material_id', 'qty_base', 'input_qty', 'input_unit', 'notes', 'created_at', 'updated_at'],
   Orders:     ['id', 'order_no', 'order_date', 'customer', 'status', 'discount', 'charges', 'extras_json', 'notes',
                'items_revenue', 'revenue', 'product_cost', 'extra_cost', 'profit', 'margin',
-               'confirmed_at', 'delivered_at', 'created_at', 'updated_at', 'stock_out'],
+               'confirmed_at', 'delivered_at', 'created_at', 'updated_at', 'stock_out', 'customer_phone',
+               'invoice_file_id', 'invoice_status'],
   OrderLines: ['id', 'order_id', 'product_id', 'product_name', 'qty', 'unit_price', 'unit_cost', 'raw_cost',
                'packaging_cost', 'tool_cost', 'other_cost', 'line_revenue', 'line_cost', 'created_at'],
   Purchases:  ['id', 'purchase_date', 'material_id', 'material_name', 'input_qty', 'input_unit', 'qty_base',
@@ -118,7 +119,8 @@ var WRITE_ACTIONS_ = {
   recordProduction: function (p) { return recordProduction_(p); },
   reverseProduction: function (p) { return reverseProduction_(p); },
   saveSettings: function (p) { return saveSettings_(p); },
-  backupNow: function () { return backupNow_(false); }
+  backupNow: function () { return backupNow_(false); },
+  saveInvoicePdf: function (p) { return saveInvoicePdf_(p); }
 };
 
 /* =========================== Setup & backups =========================== */
@@ -179,6 +181,24 @@ function backupNow_(isDaily) {
 function installTrigger_() {
   var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'dailyBackup'; });
   if (!has) ScriptApp.newTrigger('dailyBackup').timeBased().everyDays(1).atHour(3).create();
+}
+
+/** Stores the customer invoice PDF (made in the browser) in Drive, shared view-by-link, one file per order. */
+function saveInvoicePdf_(p) {
+  var order = must_('Orders', p.order_id, 'الطلب');
+  var data = String(p.data || '');
+  if (!data || data.length > 4000000) throw new Error('ملف الفاتورة غير صالح');
+  var bytes = Utilities.base64Decode(data);
+  if (!(bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46)) throw new Error('ملف الفاتورة غير صالح');
+  var props = PropertiesService.getScriptProperties();
+  var folder = getOrCreateFolder_(DriveApp.getFolderById(props.getProperty('FOLDER_ID')), 'Invoices');
+  if (order.invoice_file_id) { try { DriveApp.getFileById(order.invoice_file_id).setTrashed(true); } catch (e) { /* already gone */ } }
+  var f = folder.createFile(Utilities.newBlob(bytes, 'application/pdf',
+    'Noudella Invoice ' + order.order_no + ' (' + String(order.status).toUpperCase() + ').pdf'));
+  f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  update_('Orders', order.id, { invoice_file_id: f.getId(), invoice_status: order.status });
+  log_('invoice', 'Order', order.id, order.order_no + ' PDF');
+  return { url: 'https://drive.google.com/file/d/' + f.getId() + '/view?usp=sharing' };
 }
 
 function getOrCreateFolder_(parent, name) {
@@ -359,6 +379,11 @@ function vNum_(v, label, opt) {
 function vEnum_(v, allowed, label) {
   if (allowed.indexOf(v) === -1) throw new Error(label + ': اختيار غير صحيح');
   return v;
+}
+function vPhone_(v) {
+  var s = vStr_(v, 'رقم التليفون', 25, false).replace(/[٠-٩]/g, function (d) { return String(d.charCodeAt(0) - 0x0660); });
+  if (s && !/^\+?[0-9\s\-()]{6,22}$/.test(s)) throw new Error('رقم التليفون غير صحيح');
+  return s;
 }
 function vDate_(v) {
   if (!v) return today_();
@@ -647,6 +672,7 @@ function parseOrderInput_(p) {
     lines: parsed, extras: extras,
     order_date: vDate_(p.order_date),
     customer: vStr_(p.customer, 'اسم العميل', 60, false),
+    customer_phone: vPhone_(p.customer_phone),
     discount: vNum_(p.discount, 'الخصم', { min: 0, max: 1e8 }),
     charges: vNum_(p.charges, 'رسوم على العميل', { min: 0, max: 1e8 }),
     notes: vStr_(p.notes, 'الملاحظات', 300, false)
@@ -682,7 +708,7 @@ function saveOrder_(p) {
   var tot = orderTotals_(lines.map(function (l) { return { qty: l.qty, unit_price: l.unit_price, unit_cost: l._est }; }),
                          parsed.extras, parsed.charges, parsed.discount);
   var rec = {
-    order_date: parsed.order_date, customer: parsed.customer, discount: tot.discount, charges: tot.charges,
+    order_date: parsed.order_date, customer: parsed.customer, customer_phone: parsed.customer_phone, discount: tot.discount, charges: tot.charges,
     extras_json: JSON.stringify(parsed.extras), notes: parsed.notes, items_revenue: tot.items_revenue,
     revenue: tot.revenue, product_cost: tot.product_cost, extra_cost: tot.extra_cost, profit: tot.profit,
     margin: tot.margin === null ? '' : tot.margin, updated_at: now_()
@@ -934,6 +960,7 @@ function bootstrap_() {
     var o = pub_(r);
     o.lines = linesByOrder[r.id] || [];
     o.extras = safeJson_(r.extras_json, []);
+    o.invoice_url = r.invoice_file_id ? 'https://drive.google.com/file/d/' + r.invoice_file_id + '/view?usp=sharing' : '';
     delete o.extras_json;
     if (o.status === 'draft') {                                   // live estimate with today's costs
       o.lines.forEach(function (l) {

@@ -237,7 +237,19 @@ table.t td.n,table.t th.n{text-align:left}
 .avatar img,.hero-img img,.pimg img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 /* invoice */
 .inv-wrap{max-width:640px;margin:0 auto}
-.inv-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.inv-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:14px}
+@media (min-width:720px){.inv-actions{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.inv-actions .wa{grid-column:1/-1;background:#1FA855;color:#fff;box-shadow:0 4px 14px rgba(31,168,85,.28);height:52px;font-size:16px}
+.inv-actions .wa:hover{background:#178F47}
+.stock-pill{position:absolute;bottom:8px;right:8px;display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.94);border-radius:999px;padding:4px 11px 4px 9px;font-size:13px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.stock-pill .num{font-size:15px}
+.stock-pill.ok{color:var(--ok)}.stock-pill.out{color:var(--bad)}
+.stockbox{display:flex;align-items:center;gap:14px;margin-top:14px;padding:14px 16px;border-radius:16px;border:1.5px solid}
+.stockbox.ok{background:var(--ok-bg);border-color:#BFE3CF;color:var(--ok)}
+.stockbox.out{background:var(--bad-bg);border-color:#F5C6C1;color:var(--bad)}
+.stockbox .big{font-size:44px;font-weight:700;line-height:1;min-width:56px;text-align:center}
+.stockbox .lbl{flex:1;min-width:0}.stockbox .lbl b{display:block;font-size:17px}.stockbox .lbl span{font-size:13px;opacity:.85}
+.stockbox .btn{flex:none}
 .inv-actions .btn{padding:0 8px;font-size:14px}
 .invoice{position:relative;background:#fff;border-radius:18px;box-shadow:var(--shadow);border:1px solid #F0E6D8;padding:26px 24px 20px;overflow:hidden;color:#30272B}
 .invoice .gold{position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#C9A24B,#EAD79F,#C9A24B)}
@@ -562,11 +574,11 @@ VIEWS.products = function () {
     var c = p.cost;
     return '<div class="card pcard" data-act="nav" data-v="product" data-p="' + esc(p.id) + '">' +
       '<div class="pimg">' + initials(p.name) + picImg(p.image_url) +
-      (c.warnings.length ? '<span class="flag badge b-warn">' + ic('alert', 'sm') + '</span>' : '') + '</div>' +
+      (c.warnings.length ? '<span class="flag badge b-warn">' + ic('alert', 'sm') + '</span>' : '') +
+      '<span class="stock-pill ' + (n(p.stock) > 0 ? 'ok' : 'out') + '">' + ic('box', 'sm') + (n(p.stock) > 0 ? 'في المخزن <span class="num">' + fmt(p.stock, 0) + '</span>' : 'المخزن <span class="num">' + fmt(p.stock, 0) + '</span>') + '</span></div>' +
       '<div class="pbody"><div class="pname">' + esc(p.name) + '</div>' +
       '<div class="pmeta"><span>التكلفة</span><span class="num">' + fmt(c.total) + '</span></div>' +
       '<div class="pmeta"><span>السعر</span><span class="pprice">' + money(p.selling_price) + '</span></div>' +
-      '<div class="pmeta"><span>في المخزن</span><span class="num ' + (n(p.stock) < 0 ? 'neg' : '') + '">' + fmt(p.stock, 0) + '</span></div>' +
       '<div style="margin-top:auto;padding-top:4px">' + marginBadge(c, target()) + '</div></div></div>';
   }).join('') + '</div>';
   h += '<button class="btn btn-primary fab" data-act="newProduct">' + ic('plus') + 'منتج جديد</button>';
@@ -581,7 +593,9 @@ VIEWS.product = function (id) {
   var h = '<div class="split"><div>';
   h += '<div class="card pad"><div class="hero-head"><div class="hero-img">' + initials(p.name) + picImg(p.image_url) + '</div>' +
     '<div style="min-width:0"><div style="font-size:20px;font-weight:700">' + esc(p.name) + '</div><div class="faint">' + esc(p.category || 'بدون تصنيف') +
-    ' · جاهز في المخزن: ' + qtyText(p.stock, 'pcs') + '</div>' + (!isActive(p) ? '<span class="badge b-gray mt">مؤرشف</span>' : '') + '</div></div>';
+    '</div>' + (!isActive(p) ? '<span class="badge b-gray mt">مؤرشف</span>' : '') + '</div></div>';
+  h += '<div class="stockbox ' + (n(p.stock) > 0 ? 'ok' : 'out') + '"><div class="big num">' + fmt(p.stock, 0) + '</div><div class="lbl"><b>' + (n(p.stock) > 0 ? 'قطعة جاهزة' : 'مفيش قطع جاهزة') + '</b><span>في مخزن المنتجات</span></div>' +
+    (recipeOf(p.id).length ? '<button class="btn btn-ghost btn-sm" data-act="goProduction" data-p="' + esc(p.id) + '">' + ic('flame', 'sm') + 'إنتاج</button>' : '') + '</div>';
   h += '<div class="grid g2 g4 mt">' + stat('تكلفة القطعة', money(c.total)) + stat('سعر البيع', money(p.selling_price)) +
     stat('ربح القطعة', '<span class="' + (c.profit > 0 ? 'pos' : c.profit < 0 ? 'neg' : '') + '">' + money(c.profit) + '</span>') + stat('هامش الربح', pct(c.margin)) + '</div></div>';
   if (c.warnings.length) h += '<div class="callout warn mt">' + ic('alert', 'sm') + '<div>' + c.warnings.map(esc).join('<br>') + '</div></div>';
@@ -833,7 +847,7 @@ VIEWS.orders = function () {
   var f = S.filters, all = S.data.orders;
   var list = all.filter(function (o) {
     return (f.ordStatus === 'all' || o.status === f.ordStatus) &&
-      (!f.ordQ || (String(o.customer) + ' ' + o.order_no + ' ' + (o.lines || []).map(function (l) { return l.product_name; }).join(' ')).toLowerCase().indexOf(f.ordQ.toLowerCase()) >= 0);
+      (!f.ordQ || (String(o.customer) + ' ' + (o.customer_phone || '') + ' ' + o.order_no + ' ' + (o.lines || []).map(function (l) { return l.product_name; }).join(' ')).toLowerCase().indexOf(f.ordQ.toLowerCase()) >= 0);
   });
   var h = '<div class="row mb"><div class="search"><input class="inp" id="ordQ" placeholder="ابحث برقم الطلب أو اسم العميل أو المنتج…" value="' + esc(f.ordQ) + '" data-live="ordQ">' + ic('search', 'sm') + '</div></div>';
   h += '<div class="chips mb">' + [['all', 'الكل'], ['draft', 'مسودة'], ['confirmed', 'مؤكد'], ['delivered', 'تم التسليم'], ['cancelled', 'ملغي']].map(function (x) {
@@ -845,10 +859,10 @@ VIEWS.orders = function () {
 };
 
 function startOrder(o) {
-  if (o) S.draft = { id: o.id, order_no: o.order_no, customer: o.customer || '', order_date: o.order_date || today(), notes: o.notes || '',
+  if (o) S.draft = { id: o.id, order_no: o.order_no, customer: o.customer || '', customer_phone: o.customer_phone || '', order_date: o.order_date || today(), notes: o.notes || '',
     discount: n(o.discount) || '', charges: n(o.charges) || '', extras: (o.extras || []).map(function (e) { return { label: e.label, amount: e.amount }; }),
     lines: (o.lines || []).map(function (l) { return { product_id: l.product_id, qty: n(l.qty), unit_price: n(l.unit_price) }; }), rid: rid() };
-  else S.draft = { id: '', customer: '', order_date: today(), notes: '', discount: '', charges: '', extras: [], lines: [], rid: rid() };
+  else S.draft = { id: '', customer: '', customer_phone: '', order_date: today(), notes: '', discount: '', charges: '', extras: [], lines: [], rid: rid() };
   go('orderEdit');
 }
 VIEWS.orderEdit = function () {
@@ -858,9 +872,9 @@ VIEWS.orderEdit = function () {
   var active = prods().filter(isActive);
   var pOpts = function (sel) { return '<option value="">— اختار المنتج —</option>' + prods().filter(function (p) { return isActive(p) || p.id === sel; }).map(function (p) { return '<option value="' + esc(p.id) + '"' + (p.id === sel ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join(''); };
   var h = '<div class="split"><div>';
-  h += '<div class="card pad"><div class="grid g2"><div class="field" style="margin:0"><label>اسم العميل (اختياري)</label><input class="inp" id="od_customer" maxlength="60" value="' + esc(d.customer) + '" data-live="od" placeholder="الاسم بس"></div>' +
-    '<div class="field" style="margin:0"><label>تاريخ الطلب</label><input class="inp" type="date" id="od_date" value="' + esc(d.order_date) + '" data-live="od"></div></div>' +
-    '<div class="faint mt">' + ic('shield', 'sm') + ' متكتبش أرقام تليفونات أو عناوين — الرابط مفتوح لأي حد معاه اللينك.</div></div>';
+  h += '<div class="card pad"><div class="grid g2"><div class="field" style="margin:0"><label>اسم العميل</label><input class="inp" id="od_customer" maxlength="60" value="' + esc(d.customer) + '" data-live="od" placeholder="اسم العميل"></div>' +
+    '<div class="field" style="margin:0"><label>رقم تليفون العميل (واتساب)</label><input class="inp ltr" type="tel" inputmode="tel" id="od_phone" maxlength="25" value="' + esc(d.customer_phone) + '" data-live="od" placeholder="01xxxxxxxxx"></div></div>' +
+    '<div class="field mt" style="margin-bottom:0"><label>تاريخ الطلب</label><input class="inp" type="date" id="od_date" value="' + esc(d.order_date) + '" data-live="od"></div></div>';
   h += '<div class="sect"><h2>المنتجات</h2><span class="grow"></span><button class="btn btn-soft btn-sm" data-act="odAddLine">' + ic('plus', 'sm') + 'إضافة منتج</button></div>';
   if (!active.length) h += emptyBox('gift', 'سجل منتجاتك الأول', 'newProduct', 'منتج جديد');
   else if (!d.lines.length) h += '<div class="card empty"><div class="big">' + ic('gift') + '</div>اضغط "إضافة منتج" وابدأ الطلب</div>';
@@ -886,7 +900,7 @@ VIEWS.orderEdit = function () {
 AFTER.orderEdit = function () { odCalc(); };
 function odCollect() {
   var d = S.draft; if (!d) return;
-  d.customer = val('od_customer'); d.order_date = val('od_date') || today(); d.notes = val('od_notes');
+  d.customer = val('od_customer'); d.customer_phone = val('od_phone'); d.order_date = val('od_date') || today(); d.notes = val('od_notes');
   d.charges = val('od_charges'); d.discount = val('od_discount');
   document.querySelectorAll('[data-od-line]').forEach(function (el) { var l = d.lines[+el.getAttribute('data-od-line')]; if (l) l[el.getAttribute('data-f')] = el.value; });
   document.querySelectorAll('[data-od-extra]').forEach(function (el) { var e = d.extras[+el.getAttribute('data-od-extra')]; if (e) e[el.getAttribute('data-f')] = el.value; });
@@ -943,7 +957,7 @@ function odPayload(confirm) {
   var bad = d.lines.find(function (l) { return !l.product_id || !(parseIn(l.qty) > 0) || isNaN(parseIn(l.unit_price)); });
   if (!d.lines.length) { toast('أضف منتج واحد على الأقل', 'err'); return null; }
   if (bad) { toast('راجع المنتجات: اختار المنتج واكتب كمية أكبر من صفر وسعر صحيح', 'err'); return null; }
-  return { id: d.id, customer: d.customer, order_date: d.order_date, notes: d.notes, charges: parseIn(d.charges) || 0, discount: parseIn(d.discount) || 0,
+  return { id: d.id, customer: d.customer, customer_phone: d.customer_phone, order_date: d.order_date, notes: d.notes, charges: parseIn(d.charges) || 0, discount: parseIn(d.discount) || 0,
     extras: d.extras.filter(function (e) { return String(e.amount).trim() !== ''; }).map(function (e) { return { label: e.label, amount: parseIn(e.amount) }; }),
     lines: d.lines.map(function (l) { return { product_id: l.product_id, qty: parseIn(l.qty), unit_price: parseIn(l.unit_price) === '' ? 0 : parseIn(l.unit_price) }; }), confirm: !!confirm };
 }
@@ -989,13 +1003,15 @@ VIEWS.invoice = function (id) {
   document.querySelector('#topbar [data-act="nav"]').setAttribute('data-p', o.id);
   var st = STAMP[o.status] || STAMP.draft;
   var h = '<div class="inv-wrap"><div class="inv-actions">' +
-    '<button class="btn btn-primary" data-act="invShare" data-p="' + esc(o.id) + '">' + ic('copy', 'sm') + 'مشاركة</button>' +
-    '<button class="btn btn-soft" data-act="invSave" data-p="' + esc(o.id) + '">' + ic('image', 'sm') + 'حفظ صورة</button>' +
-    '<button class="btn btn-ghost" data-act="invPrint">' + ic('save', 'sm') + 'طباعة / PDF</button></div>';
+    '<button class="btn wa" data-act="invWhatsApp" data-p="' + esc(o.id) + '">' + WA_ICON + (o.customer_phone ? 'ابعت الفاتورة PDF على واتساب العميل' : 'ضيف رقم العميل عشان تبعت على واتساب') + '</button>' +
+    '<button class="btn btn-primary" data-act="invShare" data-p="' + esc(o.id) + '">' + ic('copy', 'sm') + 'مشاركة PDF</button>' +
+    '<button class="btn btn-soft" data-act="invPdf" data-p="' + esc(o.id) + '">' + ic('save', 'sm') + 'حفظ PDF</button>' +
+    '<button class="btn btn-ghost" data-act="invSave" data-p="' + esc(o.id) + '">' + ic('image', 'sm') + 'حفظ صورة</button>' +
+    '<button class="btn btn-ghost" data-act="invPrint">' + ic('receipt', 'sm') + 'طباعة</button></div>';
   h += '<div class="invoice" id="invoice"><div class="gold"></div>' +
     '<div class="inv-head"><img class="inv-logo" src="logo-full.png" alt="Noudella"><div class="inv-brand"><div class="wm">Noudella</div><div class="t">فاتورة</div></div>' +
     '<div class="stamp s-' + esc(o.status) + '"><i></i><b>' + st[0] + '</b><span>' + st[1] + '</span></div></div>' +
-    '<div class="inv-info"><div><small>التاريخ</small><b>' + fmtDate(o.order_date) + '</b></div><div><small>رقم الفاتورة</small><b class="num">' + esc(o.order_no) + '</b></div><div><small>العميل</small><b>' + esc(o.customer || '—') + '</b></div></div>' +
+    '<div class="inv-info"><div><small>التاريخ</small><b>' + fmtDate(o.order_date) + '</b></div><div><small>رقم الفاتورة</small><b class="num">' + esc(o.order_no) + '</b></div><div><small>العميل</small><b>' + esc(o.customer || '—') + '</b>' + (o.customer_phone ? '<div class="num" style="font-size:13px;color:var(--ink-2)">' + esc(o.customer_phone) + '</div>' : '') + '</div></div>' +
     '<table class="t inv-table"><thead><tr><th>المنتج</th><th class="n">الكمية</th><th class="n">سعر القطعة</th><th class="n">الإجمالي</th></tr></thead><tbody>' +
     o.lines.map(function (l) { return '<tr><td><b>' + esc(l.product_name) + '</b></td><td class="n num">' + fmt(l.qty, 0) + '</td><td class="n">' + imoney(l.unit_price) + '</td><td class="n">' + imoney(n(l.qty) * n(l.unit_price)) + '</td></tr>'; }).join('') +
     '</tbody></table><div class="inv-sum">' + kv('إجمالي المنتجات', imoney(o.items_revenue)) +
@@ -1005,17 +1021,53 @@ VIEWS.invoice = function (id) {
   return h;
 };
 var H2C = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-function loadScript(src) {
-  return new Promise(function (res, rej) {
-    if (window.html2canvas) return res();
-    var sc = document.createElement('script'); sc.src = src; sc.onload = function () { res(); }; sc.onerror = function () { rej(new Error('تعذر تجهيز الصورة، تأكد من الإنترنت')); };
+var JSPDF = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+var WA_ICON = '<svg class="i" viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></svg>';
+function loadScripts(list) { return list.reduce(function (pr, src) { return pr.then(function () { return loadOne(src); }); }, Promise.resolve()); }
+var LOADED = {};
+function loadOne(src) {
+  if (LOADED[src]) return LOADED[src];
+  LOADED[src] = new Promise(function (res, rej) {
+    var sc = document.createElement('script'); sc.src = src; sc.onload = function () { res(); };
+    sc.onerror = function () { delete LOADED[src]; rej(new Error('تعذر تجهيز الفاتورة، تأكد من الإنترنت')); };
     document.head.appendChild(sc);
   });
+  return LOADED[src];
 }
+/** Invoice → single-page PDF (base64) built in the browser from the on-screen invoice. */
+function invoicePdf() {
+  var el = document.getElementById('invoice');
+  setBusy(true);
+  return loadScripts([H2C, JSPDF]).then(function () { return document.fonts && document.fonts.ready; })
+    .then(function () { return html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false }); })
+    .then(function (c) {
+      var w = c.width / 2, h = c.height / 2;
+      var pdf = new window.jspdf.jsPDF({ orientation: w > h ? 'l' : 'p', unit: 'pt', format: [w + 40, h + 40], compress: true });
+      pdf.addImage(c.toDataURL('image/jpeg', 0.92), 'JPEG', 20, 20, w, h);
+      setBusy(false);
+      var b64 = pdf.output('datauristring').split(',')[1];
+      return { b64: b64, blob: pdf.output('blob') };
+    }, function (e) { setBusy(false); throw e; });
+}
+/** Egyptian-friendly WhatsApp number: 01xxxxxxxxx → 201xxxxxxxxx; +/00 prefixes removed. */
+function waNumber(phone) {
+  var d = String(phone || '').replace(/[٠-٩]/g, function (x) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(x); }).replace(/[^0-9+]/g, '');
+  if (d.indexOf('+') === 0) d = d.slice(1); else if (d.indexOf('00') === 0) d = d.slice(2); else if (/^0\d{10}$/.test(d)) d = '2' + d;
+  return d.replace(/\D/g, '');
+}
+function waMessage(o, url) {
+  var p = String(o.order_date || '').slice(0, 10).split('-');
+  return 'أهلاً ' + (o.customer || '') + '\n' +
+    'دي فاتورة طلبك رقم ' + o.order_no + ' من Noudella' + (p.length === 3 ? ' بتاريخ ' + p[2] + '/' + p[1] + '/' + p[0] : '') + '\n' +
+    'الإجمالي: ' + fmt(o.revenue, 2) + ' ج.م\n' +
+    'الفاتورة PDF:\n' + url + '\n\n' +
+    'شكرًا لاختيارك Noudella';
+}
+function waLink(o, url) { return 'https://wa.me/' + waNumber(o.customer_phone) + '?text=' + encodeURIComponent(waMessage(o, url)); }
 function invoiceBlob() {
   var el = document.getElementById('invoice');
   setBusy(true);
-  return loadScript(H2C).then(function () { return document.fonts && document.fonts.ready; })
+  return loadOne(H2C).then(function () { return document.fonts && document.fonts.ready; })
     .then(function () { return html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false }); })
     .then(function (c) { return new Promise(function (r) { c.toBlob(r, 'image/png'); }); })
     .then(function (b) { setBusy(false); return b; }, function (e) { setBusy(false); throw e; });
@@ -1031,7 +1083,7 @@ VIEWS.order = function (id) {
   var st = STATUS[o.status];
   topbar('طلب ' + o.order_no, { back: 'orders' });
   var h = '<div class="split"><div>';
-  h += '<div class="card pad"><div class="between"><div><div style="font-size:19px;font-weight:700">' + esc(o.customer || 'بدون اسم') + '</div><div class="faint">' + fmtDate(o.order_date) + ' · ' + esc(o.order_no) + '</div></div><span class="badge ' + st[1] + '">' + st[0] + '</span></div>' +
+  h += '<div class="card pad"><div class="between"><div><div style="font-size:19px;font-weight:700">' + esc(o.customer || 'بدون اسم') + '</div>' + (o.customer_phone ? '<a class="num" style="font-weight:600" href="tel:' + esc(String(o.customer_phone).replace(/[^0-9+]/g, '')) + '">' + esc(o.customer_phone) + '</a>' : '') + '<div class="faint">' + fmtDate(o.order_date) + ' · ' + esc(o.order_no) + '</div></div><span class="badge ' + st[1] + '">' + st[0] + '</span></div>' +
     (o.notes ? '<div class="muted mt">' + esc(o.notes) + '</div>' : '') +
     (o.estimated ? '<div class="callout warn mt">' + ic('clock', 'sm') + '<div>الطلب لسه مسودة — الأرقام تقديرية بأسعار الخامات النهارده.</div></div>'
       : (o.confirmed_at ? '<div class="callout ok mt">' + ic('shield', 'sm') + '<div>الأسعار والتكلفة متثبتة من وقت التأكيد (' + fmtDate(o.confirmed_at) + ').</div></div>' : '')) + '</div>';
@@ -1145,7 +1197,7 @@ VIEWS.settings = function () {
     '<button class="btn btn-primary btn-block" data-lockable data-act="saveSettings">' + ic('save', 'sm') + 'حفظ</button></div>' +
     '<div class="card pad mt"><div class="row mb">' + ic('shield') + '<b>الأمان والنسخ الاحتياطي</b></div><div class="muted">النظام بياخد نسخة احتياطية تلقائيًا كل يوم ويحتفظ بآخر 30 نسخة في مجلد Backups على جوجل درايف.</div>' +
     '<button class="btn btn-soft btn-block mt" data-lockable data-act="backupNow">' + ic('save', 'sm') + 'خد نسخة احتياطية دلوقتي</button>' +
-    '<div class="callout warn mt">' + ic('alert', 'sm') + '<div>الرابط مفتوح من غير دخول: أي حد معاه اللينك يقدر يشوف ويعدّل. متشاركش الرابط، ومتسجلش بيانات شخصية للعملاء.</div></div></div>' +
+    '</div>' +
     '<div class="faint mt">الإصدار ' + esc(S.data.version) + '</div></div>';
 };
 
@@ -1238,7 +1290,7 @@ var ACT = {
       .then(function (r) { if (r) { closeModal(); render(); } });
   },
   goPurchase: function (el) { go('purchases', el && el.getAttribute('data-p')); },
-  goProduction: function () { go('production'); },
+  goProduction: function (el) { go('production', el && el.getAttribute('data-p')); },
   savePurchase: function () {
     var q = parseIn(val('pu_qty')), t = parseIn(val('pu_total'));
     if (!val('pu_mat')) return toast('اختار الخامة', 'err');
@@ -1318,14 +1370,34 @@ var ACT = {
     confirmBox(txt[0], txt[1], txt[2], txt[3]).then(function (y) { if (y) run('setOrderStatus', { id: id, status: s }, { rid: r0, ok: 'تم' }).then(function (r) { if (r) { if (s === 'cancelled') go('invoice', id); else render(); } }); });
   },
   invPrint: function () { window.print(); },
+  invWhatsApp: function (el) {
+    var o = S.data.orders.find(function (x) { return x.id === el.getAttribute('data-p'); });
+    if (!o.customer_phone) { toast('ضيف رقم تليفون العميل في الطلب الأول', 'err'); startOrder(o); return; }
+    if (waNumber(o.customer_phone).length < 8) { toast('رقم التليفون مش واضح، راجعه في الطلب', 'err'); return; }
+    if (o.invoice_url && o.invoice_status === o.status) { window.open(waLink(o, o.invoice_url), '_blank'); return; }
+    var r0 = rid();
+    invoicePdf().then(function (pdf) {
+      return run('saveInvoicePdf', { order_id: o.id, data: pdf.b64 }, { rid: r0 });
+    }).then(function (r) {
+      if (!r) return;
+      var o2 = S.data.orders.find(function (x) { return x.id === o.id; }) || o, link = waLink(o2, r.result.url);
+      var win = window.open(link, '_blank');
+      if (!win) modal({ title: 'الفاتورة جاهزة', body: '<div class="callout ok">' + ic('check', 'sm') + '<div>الـ PDF اترفع. اضغط الزرار وهيفتح واتساب على رقم العميل والرسالة جاهزة — اضغط إرسال بس.</div></div>',
+        footer: '<a class="btn wa" style="flex:1;background:#1FA855;color:#fff" target="_blank" rel="noopener" href="' + esc(link) + '" onclick="setTimeout(closeModal,300)">' + WA_ICON + 'افتح واتساب</a>' });
+    }).catch(function (e) { toast(e.message, 'err'); });
+  },
+  invPdf: function (el) {
+    var o = S.data.orders.find(function (x) { return x.id === el.getAttribute('data-p'); });
+    invoicePdf().then(function (pdf) { downloadBlob(pdf.blob, 'Noudella-' + o.order_no + '.pdf'); toast('اتحفظ ملف PDF', 'ok'); }).catch(function (e) { toast(e.message, 'err'); });
+  },
   invSave: function (el) {
     var o = S.data.orders.find(function (x) { return x.id === el.getAttribute('data-p'); });
     invoiceBlob().then(function (b) { downloadBlob(b, 'Noudella-' + o.order_no + '.png'); toast('اتحفظت صورة الفاتورة', 'ok'); }).catch(function (e) { toast(e.message, 'err'); });
   },
   invShare: function (el) {
-    var o = S.data.orders.find(function (x) { return x.id === el.getAttribute('data-p'); }), name = 'Noudella-' + o.order_no + '.png';
-    invoiceBlob().then(function (b) {
-      var file = new File([b], name, { type: 'image/png' });
+    var o = S.data.orders.find(function (x) { return x.id === el.getAttribute('data-p'); }), name = 'Noudella-' + o.order_no + '.pdf';
+    invoicePdf().then(function (pdf) {
+      var b = pdf.blob, file = new File([b], name, { type: 'application/pdf' });
       if (navigator.canShare && navigator.canShare({ files: [file] })) return navigator.share({ files: [file], title: 'Noudella ' + o.order_no }).catch(function () {});
       downloadBlob(b, name); toast('المشاركة مش متاحة هنا — اتحفظت الصورة بدلها', 'ok');
     }).catch(function (e) { toast(e.message, 'err'); });

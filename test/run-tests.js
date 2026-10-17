@@ -204,6 +204,25 @@ t('reopen confirmed → draft returns pieces and gives live estimate', () => {
   const o = D.orders.find(x => x.id === r.result.id); assert.ok(o.estimated); near(o.product_cost, Math.round(CS.cost.total * 100) / 100);
 });
 
+t('customer phone saved; invalid phone rejected', () => {
+  const r = ok('saveOrder', { customer: 'منى', customer_phone: '+20 101 234 5678', lines: [{ product_id: JORY.id, qty: 1, unit_price: 60 }] });
+  refresh(r.data); assert.strictEqual(D.orders.find(x => x.id === r.result.id).customer_phone, '+20 101 234 5678');
+  assert.ok(!api('saveOrder', { customer_phone: 'abc', lines: [{ product_id: JORY.id, qty: 1 }] }).ok);
+  const r2 = ok('saveOrder', { customer: 'x', customer_phone: '٠١٠١٢٣٤٥٦٧٨', lines: [{ product_id: JORY.id, qty: 1 }] });
+  assert.strictEqual(r2.data.orders.find(x => x.id === r2.result.id).customer_phone, '01012345678', 'arabic digits normalised');
+});
+t('invoice PDF stored per order (replaced, not duplicated); junk refused', () => {
+  const o = D.orders[0];
+  const pdf = Buffer.from('%PDF-1.4 test').toString('base64');
+  const r1 = ok('saveInvoicePdf', { order_id: o.id, data: pdf });
+  assert.ok(/drive\.google\.com\/file\/d\//.test(r1.result.url));
+  const id1 = r1.data.orders.find(x => x.id === o.id).invoice_file_id;
+  const r2 = ok('saveInvoicePdf', { order_id: o.id, data: pdf });
+  const o2 = r2.data.orders.find(x => x.id === o.id);
+  assert.ok(o2.invoice_file_id && o2.invoice_file_id !== id1 && o2.invoice_status === o.status && o2.invoice_url);
+  assert.ok(!api('saveInvoicePdf', { order_id: o.id, data: Buffer.from('<html>').toString('base64') }).ok);
+});
+
 console.log('\nProduction');
 t('shortage blocks production and lists materials', () => {
   const r = api('recordProduction', { product_id: CS.id, qty: 1000 });
