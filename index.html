@@ -383,6 +383,15 @@ function costText(avg, base) {
 function unitOpts(base, sel) { return (DIM_UNITS[base] || [base]).map(function (u) { return '<option value="' + u + '"' + (u === sel ? ' selected' : '') + '>' + UNIT_AR[u] + '</option>'; }).join(''); }
 function rid() { return 'r' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
 function today() { return (S.data && S.data.today) || new Date().toISOString().slice(0, 10); }
+function specText(p) {
+  var a = [];
+  if (n(p.weight_g) > 0) a.push('<span class="num">' + fmt(p.weight_g, 1) + '</span> جم');
+  if (n(p.width_cm) > 0 || n(p.length_cm) > 0) a.push('<span class="num">' + fmt(p.width_cm, 1) + '×' + fmt(p.length_cm, 1) + '</span> سم');
+  return a.join(' · ');
+}
+function waxInRecipe(pid) {
+  return recipeOf(pid).reduce(function (t, r) { var m = matById(r.material_id); return t + (m && m.base_unit === 'g' && /شمع/.test(m.category + ' ' + m.name) ? n(r.qty_base) : 0); }, 0);
+}
 function picImg(url) { return url ? '<img loading="lazy" src="' + esc(url) + '" alt="" onerror="this.remove()">' : ''; }
 function initials(s) { s = String(s || '').trim(); return esc(s.charAt(0) || '؟'); }
 function mats() { return (S.data.materials || []); }
@@ -576,7 +585,7 @@ VIEWS.products = function () {
       '<div class="pimg">' + initials(p.name) + picImg(p.image_url) +
       (c.warnings.length ? '<span class="flag badge b-warn">' + ic('alert', 'sm') + '</span>' : '') +
       '<span class="stock-pill ' + (n(p.stock) > 0 ? 'ok' : 'out') + '">' + ic('box', 'sm') + (n(p.stock) > 0 ? 'في المخزن <span class="num">' + fmt(p.stock, 0) + '</span>' : 'المخزن <span class="num">' + fmt(p.stock, 0) + '</span>') + '</span></div>' +
-      '<div class="pbody"><div class="pname">' + esc(p.name) + '</div>' +
+      '<div class="pbody"><div class="pname">' + esc(p.name) + '</div>' + (specText(p) ? '<div class="faint" style="font-size:12.5px">' + specText(p) + '</div>' : '') +
       '<div class="pmeta"><span>التكلفة</span><span class="num">' + fmt(c.total) + '</span></div>' +
       '<div class="pmeta"><span>السعر</span><span class="pprice">' + money(p.selling_price) + '</span></div>' +
       '<div style="margin-top:auto;padding-top:4px">' + marginBadge(c, target()) + '</div></div></div>';
@@ -593,7 +602,9 @@ VIEWS.product = function (id) {
   var h = '<div class="split"><div>';
   h += '<div class="card pad"><div class="hero-head"><div class="hero-img">' + initials(p.name) + picImg(p.image_url) + '</div>' +
     '<div style="min-width:0"><div style="font-size:20px;font-weight:700">' + esc(p.name) + '</div><div class="faint">' + esc(p.category || 'بدون تصنيف') +
-    '</div>' + (!isActive(p) ? '<span class="badge b-gray mt">مؤرشف</span>' : '') + '</div></div>';
+    '</div>' + (specText(p) ? '<div class="row mt" style="gap:8px;flex-wrap:wrap">' +
+      (n(p.weight_g) > 0 ? '<span class="badge b-rose">وزن الشمعة: <span class="num">' + fmt(p.weight_g, 1) + '</span> جم</span>' : '') +
+      (n(p.width_cm) > 0 || n(p.length_cm) > 0 ? '<span class="badge b-info">المقاس (عرض×طول): <span class="num">' + fmt(p.width_cm, 1) + '×' + fmt(p.length_cm, 1) + '</span> سم</span>' : '') + '</div>' : '') + (!isActive(p) ? '<span class="badge b-gray mt">مؤرشف</span>' : '') + '</div></div>';
   h += '<div class="stockbox ' + (n(p.stock) > 0 ? 'ok' : 'out') + '"><div class="big num">' + fmt(p.stock, 0) + '</div><div class="lbl"><b>' + (n(p.stock) > 0 ? 'قطعة جاهزة' : 'مفيش قطع جاهزة') + '</b><span>في مخزن المنتجات</span></div>' +
     (recipeOf(p.id).length ? '<button class="btn btn-ghost btn-sm" data-act="goProduction" data-p="' + esc(p.id) + '">' + ic('flame', 'sm') + 'إنتاج</button>' : '') + '</div>';
   h += '<div class="grid g2 g4 mt">' + stat('تكلفة القطعة', money(c.total)) + stat('سعر البيع', money(p.selling_price)) +
@@ -601,6 +612,11 @@ VIEWS.product = function (id) {
   if (c.warnings.length) h += '<div class="callout warn mt">' + ic('alert', 'sm') + '<div>' + c.warnings.map(esc).join('<br>') + '</div></div>';
   // recipe
   h += '<div class="sect"><h2>الوصفة (لعمل قطعة واحدة)</h2><span class="grow"></span><button class="btn btn-soft btn-sm" data-act="addLine" data-p="' + esc(p.id) + '">' + ic('plus', 'sm') + 'إضافة</button></div>';
+  if (n(p.weight_g) > 0) {
+    var wx = waxInRecipe(p.id), dw = Math.abs(wx - n(p.weight_g));
+    h += '<div class="callout ' + (wx === 0 ? 'info' : dw < 0.01 ? 'ok' : 'warn') + ' mb">' + ic(wx && dw < 0.01 ? 'check' : 'alert', 'sm') + '<div>القالب بياخد <b class="num">' + fmt(p.weight_g, 1) + '</b> جم شمع للقطعة' +
+      (wx === 0 ? ' — ضيف نوع الشمع للوصفة وهتتكتب الكمية دي لوحدها.' : dw < 0.01 ? ' — والشمع في الوصفة مطابق.' : ' — بس الشمع في الوصفة <b class="num">' + fmt(wx, 1) + '</b> جم.') + '</div></div>';
+  }
   if (!c.lines.length) h += emptyBox('layers', 'أضف الخامات والتغليف والقالب اللي بيدخلوا في القطعة الواحدة', 'addLine', 'إضافة أول خامة').replace('data-act="addLine"', 'data-act="addLine" data-p="' + esc(p.id) + '"');
   else {
     h += '<div class="card tscroll"><table class="t"><thead><tr><th>الخامة</th><th>الكمية</th><th class="n">التكلفة</th><th></th></tr></thead><tbody>';
@@ -649,6 +665,8 @@ function productForm(p) {
   var body = '<div class="field"><label>اسم المنتج</label><input class="inp" id="pf_name" maxlength="80" value="' + esc(p.name) + '" placeholder="مثال: شمعة الشمعدان"></div>' +
     '<div class="field"><label>التصنيف</label><input class="inp" id="pf_cat" maxlength="40" list="pcats" value="' + esc(p.category) + '" placeholder="شموع، هدايا، جبس…"><datalist id="pcats">' + cats.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist></div>' +
     '<div class="field"><label>سعر البيع للقطعة (' + cur() + ')</label><input class="inp ltr" id="pf_price" inputmode="decimal" value="' + esc(p.selling_price || '') + '" placeholder="0"></div>' +
+    '<div class="field"><label>وزن الشمعة (جرام)</label><input class="inp ltr" id="pf_weight" inputmode="decimal" value="' + esc(n(p.weight_g) ? p.weight_g : '') + '" placeholder="مثلاً 70"><span class="hint">كمية الشمع اللي القالب بياخدها لعمل شمعة واحدة.</span></div>' +
+    '<div class="field"><label>مقاس الشمعة (سم)</label><div class="combo"><input class="inp ltr" id="pf_width" inputmode="decimal" value="' + esc(n(p.width_cm) ? p.width_cm : '') + '" placeholder="العرض"><span style="align-self:center" class="muted">×</span><input class="inp ltr" id="pf_length" inputmode="decimal" value="' + esc(n(p.length_cm) ? p.length_cm : '') + '" placeholder="الطول"></div></div>' +
     '<div class="field"><label>تكلفة إضافية لكل قطعة (اختياري)</label><div class="combo"><input class="inp ltr" id="pf_other" inputmode="decimal" value="' + esc(n(p.other_cost) ? p.other_cost : '') + '" placeholder="0"><input class="inp" id="pf_other_l" maxlength="40" value="' + esc(p.other_cost_label) + '" placeholder="مثلاً: مصنعية / كهرباء"></div><span class="hint">أي تكلفة ثابتة للقطعة مش خامة (مصنعية، كهرباء…). التغليف يتسجل في الوصفة مش هنا.</span></div>' +
     photoField('pf', p.image_url, 'صورة المنتج (اختياري)') +
     '<div class="field"><label>ملاحظات</label><textarea class="inp" id="pf_notes" maxlength="300">' + esc(p.notes) + '</textarea></div>';
@@ -1235,10 +1253,10 @@ var ACT = {
   newProduct: function () { productForm(null); },
   editProduct: function (el) { productForm(prodById(el.getAttribute('data-p'))); },
   saveProduct: function () {
-    var price = parseIn(val('pf_price')), other = parseIn(val('pf_other'));
-    if (isNaN(price) || isNaN(other)) return toast('اكتب الأرقام بشكل صحيح', 'err');
+    var price = parseIn(val('pf_price')), other = parseIn(val('pf_other')), wg = parseIn(val('pf_weight')), wd = parseIn(val('pf_width')), ln = parseIn(val('pf_length'));
+    if ([price, other, wg, wd, ln].some(function (x) { return x !== '' && (isNaN(x) || x < 0); })) return toast('اكتب الأرقام بشكل صحيح', 'err');
     var pl = { id: S.pf.id, name: val('pf_name'), category: val('pf_cat'), selling_price: price === '' ? 0 : price, other_cost: other === '' ? 0 : other,
-      other_cost_label: val('pf_other_l'), notes: val('pf_notes'), image: S.pf.image, removeImage: S.pf.removeImage };
+      other_cost_label: val('pf_other_l'), weight_g: wg, width_cm: wd, length_cm: ln, notes: val('pf_notes'), image: S.pf.image, removeImage: S.pf.removeImage };
     run('saveProduct', pl, { rid: S.pf.rid, ok: 'تم حفظ المنتج' }).then(function (r) { if (r) { closeModal(); go('product', (r.result && r.result.id) || S.pf.id); } });
   },
   dupProduct: function (el) {
@@ -1446,7 +1464,15 @@ document.addEventListener('input', function (e) {
 });
 document.addEventListener('change', function (e) {
   var t = e.target;
-  if (t.id === 'rl_mat') { rlUnits(); rlPreview(); }
+  if (t.id === 'rl_mat') {
+    rlUnits();
+    var m0 = matById(t.value), p0 = S.rl && prodById(S.rl.product_id), q0 = document.getElementById('rl_qty');
+    if (m0 && p0 && q0 && !S.rl.id && m0.base_unit === 'g' && /شمع/.test(m0.category + ' ' + m0.name) && n(p0.weight_g) > 0) {
+      var left = n(p0.weight_g) - waxInRecipe(p0.id);
+      if (left > 0) { q0.value = +left.toFixed(2); document.getElementById('rl_unit').value = 'g'; }
+    }
+    rlPreview();
+  }
   else if (t.id === 'pu_mat') puSync();
   else if (t.id === 'pr_prod') prPreview();
   else if (t.hasAttribute('data-od-line') && t.getAttribute('data-f') === 'product_id') {

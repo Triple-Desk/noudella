@@ -229,6 +229,20 @@ t('invoice PDF stored per order (replaced, not duplicated); junk refused', () =>
   assert.ok(!api('saveInvoicePdf', { order_id: o.id, data: Buffer.from('<html>').toString('base64') }).ok);
 });
 
+t('candle weight & size are real fields; notes migrate', () => {
+  const r = ok('saveProduct', { name: 'بابلز تجربة', weight_g: 150, width_cm: 6, length_cm: 6.5 });
+  const p = r.data.products.find(x => x.id === r.result.id);
+  assert.strictEqual(Number(p.weight_g), 150); assert.strictEqual(Number(p.length_cm), 6.5);
+  assert.ok(!api('saveProduct', { name: 'x2', weight_g: -1 }).ok);
+  const r2 = ok('saveProduct', { name: 'قديم', notes: 'الوزن: 70 جرام · المقاس: 2×25 سم' });
+  G.setup();
+  const q = ok('bootstrap').data.products.find(x => x.id === r2.result.id);
+  assert.strictEqual(Number(q.weight_g), 70); assert.strictEqual(Number(q.width_cm), 2); assert.strictEqual(Number(q.length_cm), 25);
+  assert.strictEqual(q.notes, '', 'notes cleaned: ' + q.notes);
+  const d = ok('duplicateProduct', { id: p.id, name: 'بابلز نسخة' }).data.products.find(x => x.name === 'بابلز نسخة');
+  assert.strictEqual(Number(d.weight_g), 150);
+});
+
 console.log('\nProduction');
 t('shortage blocks production and lists materials', () => {
   const r = api('recordProduction', { product_id: CS.id, qty: 1000 });

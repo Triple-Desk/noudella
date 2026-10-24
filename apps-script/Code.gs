@@ -13,7 +13,7 @@ var APP = {
   TZ: 'Africa/Cairo',
   KEEP_BACKUPS: 30,
   MAX_WRITES_PER_MIN: 90,
-  VERSION: '1.3.1'
+  VERSION: '1.4.0'
 };
 
 var SCHEMA = {
@@ -21,7 +21,7 @@ var SCHEMA = {
   Materials:  ['id', 'name', 'category', 'kind', 'base_unit', 'stock', 'avg_cost', 'min_stock', 'life_units',
                'supplier', 'notes', 'active', 'created_at', 'updated_at', 'image_id'],
   Products:   ['id', 'name', 'category', 'selling_price', 'other_cost', 'other_cost_label', 'image_id', 'stock',
-               'notes', 'active', 'created_at', 'updated_at'],
+               'notes', 'active', 'created_at', 'updated_at', 'weight_g', 'width_cm', 'length_cm'],
   Recipes:    ['id', 'product_id', 'material_id', 'qty_base', 'input_qty', 'input_unit', 'notes', 'created_at', 'updated_at'],
   Orders:     ['id', 'order_no', 'order_date', 'customer', 'status', 'discount', 'charges', 'extras_json', 'notes',
                'items_revenue', 'revenue', 'product_cost', 'extra_cost', 'profit', 'margin',
@@ -42,7 +42,8 @@ var NUMERIC_COLS = {
   stock: 1, avg_cost: 1, min_stock: 1, life_units: 1, selling_price: 1, other_cost: 1, qty_base: 1, input_qty: 1,
   discount: 1, charges: 1, items_revenue: 1, revenue: 1, product_cost: 1, extra_cost: 1, profit: 1, margin: 1,
   qty: 1, unit_price: 1, unit_cost: 1, raw_cost: 1, packaging_cost: 1, tool_cost: 1, line_revenue: 1, line_cost: 1,
-  total_price: 1, avg_before: 1, avg_after: 1, stock_after: 1, total_cost: 1, value: 1
+  total_price: 1, avg_before: 1, avg_after: 1, stock_after: 1, total_cost: 1, value: 1,
+  weight_g: 1, width_cm: 1, length_cm: 1
 };
 
 /* =========================== Web entry points =========================== */
@@ -566,6 +567,9 @@ function saveProduct_(p) {
     selling_price: vNum_(p.selling_price, 'سعر البيع', { min: 0, max: 1e8 }),
     other_cost: vNum_(p.other_cost, 'تكلفة إضافية', { min: 0, max: 1e8 }),
     other_cost_label: vStr_(p.other_cost_label, 'وصف التكلفة الإضافية', 40, false),
+    weight_g: vNum_(p.weight_g, 'وزن الشمعة', { min: 0, max: 100000, dflt: '' }),
+    width_cm: vNum_(p.width_cm, 'العرض', { min: 0, max: 10000, dflt: '' }),
+    length_cm: vNum_(p.length_cm, 'الطول', { min: 0, max: 10000, dflt: '' }),
     notes: vStr_(p.notes, 'الملاحظات', 300, false),
     updated_at: now_()
   };
@@ -604,6 +608,7 @@ function duplicateProduct_(p) {
   var id = newId_('PRD'), t = now_();
   insert_('Products', [{ id: id, name: name, category: src.category, selling_price: src.selling_price,
     other_cost: src.other_cost, other_cost_label: src.other_cost_label, image_id: '', stock: 0, notes: src.notes,
+    weight_g: src.weight_g, width_cm: src.width_cm, length_cm: src.length_cm,
     active: true, created_at: t, updated_at: t }]);
   var lines = rows_('Recipes').filter(function (r) { return r.product_id === src.id; }).map(function (r) {
     return { id: newId_('RCP'), product_id: id, material_id: r.material_id, qty_base: r.qty_base, input_qty: r.input_qty,
@@ -867,6 +872,17 @@ function migrate_() {
     if (o.stock_out === '' || o.stock_out === null || o.stock_out === undefined) {
       update_('Orders', o.id, { stock_out: o.status === 'delivered' });
     }
+  });
+  // v1.4.0: weight & size became real product fields; move them out of the notes written by the sheet import.
+  rows_('Products').forEach(function (p) {
+    var notes = String(p.notes || ''), patch = {};
+    var w = notes.match(/الوزن:\s*([\d.]+)\s*جرام/), sz = notes.match(/المقاس:\s*([\d.]+)\s*×\s*([\d.]+)\s*سم/);
+    if (w && (p.weight_g === '' || p.weight_g === null)) patch.weight_g = Number(w[1]);
+    if (sz && (p.width_cm === '' || p.width_cm === null)) { patch.width_cm = Number(sz[1]); patch.length_cm = Number(sz[2]); }
+    if (!Object.keys(patch).length) return;
+    patch.notes = notes.replace(/الوزن:\s*[\d.]+\s*جرام/, '').replace(/المقاس:\s*[\d.]+\s*×\s*[\d.]+\s*سم/, '')
+      .replace(/\s*·\s*·\s*/g, ' · ').replace(/^\s*·\s*|\s*·\s*$/g, '').trim();
+    update_('Products', p.id, patch);
   });
 }
 
