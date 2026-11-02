@@ -222,7 +222,8 @@ textarea.inp{min-height:88px;resize:vertical}
   .cover{page:cover;break-after:page;width:210mm;height:296mm;background:var(--wine-deep);color:var(--ivory);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;position:relative}
   .cover::before,.cover::after{content:"";position:absolute;left:12mm;right:12mm;border-top:.6pt solid var(--gold)}
   .cover::before{top:12mm}.cover::after{bottom:12mm}
-  .cover img{width:82mm;height:82mm;border-radius:50%}
+  .cover .disc{width:84mm;height:84mm;border-radius:50%;background:var(--ivory);display:grid;place-items:center;box-shadow:0 0 0 .6pt var(--gold)}
+  .cover .disc img{width:90%;height:90%}
   .cover h1{font:700 40pt/1.3 var(--display);margin:10mm 0 0}
   .cover .tagline{font-size:17pt}
   .cover .script{font:400 24pt/1.3 var(--script);color:var(--gold-soft);margin-top:8mm}
@@ -278,7 +279,7 @@ textarea.inp{min-height:88px;resize:vertical}
 </header>
 
 <section class="cover print-only" aria-hidden="true">
-  <img src="../logo-full.png" alt="">
+  <div class="disc"><img src="../brand/noudella-medallion-gold.svg" alt=""></div>
   <h1>كتالوج نوديلا</h1>
   <p class="tagline">معمولة بحب… عشان تفضل ذكرى</p>
   <p class="script en">Handmade with care</p>
