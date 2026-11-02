@@ -14,3 +14,11 @@ Brand colours: burgundy #6D1833 (screens, social), deep wine #5A0C18 (print back
 bronze #9C724E (gold-coloured text on ivory), ivory #FCEFDC, off-white #FAF8F6, ink #30272B.
 Fonts: Amiri (Arabic headings), IBM Plex Sans Arabic (Arabic text), Cormorant Garamond (Latin), Pinyon Script (accent).
 Minimum logo size: 15 mm.
+
+## Print kit (2026-11-02)
+- Design canvas «تصميمات نوديلا» (print page) — real sizes with 3 mm bleed; export from the canvas (Share › Export).
+- `illustrations/sprig-*-{ivory,wine}.svg` — original botanical sprigs (bronze stems, olive-gold leaves, burgundy berries): corner, side, pair, tiny; `sprig.py` / `build_sprigs.py` regenerate them.
+- `illustrations/pack-*.svg` — packaging-guide line illustrations (wrap, box, gift set, clear bag); `illus.py` regenerates them.
+- `qr-*-paper.svg` — QR codes on the ivory print ground.
+- `previews/print-kit-overview.jpg`, `previews/print-kit-contact-sheet.jpg` — previews of the whole print set.
+- Print family rules: grounds ivory #FBF4E8 and wine #5A0C18; sprig stem #9C724E, leaves #E6CDA4 / #D2A66B, berries #6D1833 / #8A242A; internal pieces (shipping label, order prep card) white A6, 4 per A4; cut shapes: round 4/8 cm, seal & fragile 2 mm rounded rectangles, tags with 7 mm clipped corners and a 4 mm hole.
