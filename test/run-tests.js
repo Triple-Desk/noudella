@@ -279,6 +279,74 @@ t('migration marks old delivered orders as already out', () => {
   assert.strictEqual(sh.grid[row][col], true);
 });
 
+console.log('\nCatalogue');
+const pub = () => JSON.parse(G.doPost({ postData: { contents: JSON.stringify({ action: 'catalog' }) } }).getContent());
+const allItems = d => d.collections.reduce((a, c) => a.concat(c.items), []);
+t('catalogue fields saved; public catalogue (no key) has safe fields only, prices hidden by default', () => {
+  refresh(ok('saveProduct', { id: CS.id, name: CS.name, category: 'شموع', selling_price: 80,
+    catalog: { show: true, collection: 'الكلاسيك والشمعدانات', desc: 'شمعة كلاسيك بقاعدة', badge: 'best', colors: 'أبيض · بيج', lead_time: '3 أيام', sort: 2 } }).data);
+  assert.strictEqual(CS.catalog_show, true); assert.strictEqual(CS.collection, 'الكلاسيك والشمعدانات'); assert.strictEqual(Number(CS.catalog_sort), 2);
+  const r = pub(); assert.ok(r.ok, r.error);
+  const it = allItems(r.data).find(x => x.id === CS.id);
+  assert.ok(it && it.name === CS.name && it.desc === 'شمعة كلاسيك بقاعدة' && it.badge === 'best' && it.colors === 'أبيض · بيج' && it.lead === '3 أيام');
+  assert.strictEqual(it.price, null, 'prices hidden until the owner turns them on');
+  assert.deepStrictEqual(Object.keys(it).sort(), ['badge', 'colors', 'desc', 'id', 'img', 'l', 'lead', 'name', 'price', 'w', 'weight']);
+  const raw = JSON.stringify(r);
+  ['avg_cost', 'cost', 'stock', 'notes', 'supplier', 'customer', 'profit', 'margin', 'selling_price', G._props.API_KEY].forEach(w => assert.ok(!raw.includes(w), 'leaked ' + w));
+  assert.ok(!allItems(r.data).some(x => x.id === JORY.id), 'not-shown product must stay out');
+});
+t('settings: prices on, contact, collection order; archived and hidden products excluded', () => {
+  ok('saveCatalogSettings', { show_prices: true, whatsapp: '01141151032', instagram: '@noudella.creative',
+    facebook: 'https://www.facebook.com/people/Noudella/100083123892315/', intro: 'شموع معمولة بالإيد', price_note: 'السعر للقطعة',
+    terms: 'اختار المنتجات\n\n  ابعتلنا على واتساب  ', collections: [{ name: 'الرومانسي والأفراح', desc: 'للخطوبة والفرح' }, { name: 'الكلاسيك والشمعدانات', desc: '' }] });
+  refresh(ok('saveProduct', { id: JORY.id, name: JORY.name, selling_price: 60, catalog: { show: true, collection: 'الرومانسي والأفراح' } }).data);
+  const arch = ok('saveProduct', { name: 'منتج مؤرشف', selling_price: 10, catalog: { show: true, collection: 'الرومانسي والأفراح' } }).result.id;
+  ok('setProductActive', { id: arch, active: false });
+  const d = pub().data;
+  assert.deepStrictEqual(d.collections.map(c => c.name).slice(0, 2), ['الرومانسي والأفراح', 'الكلاسيك والشمعدانات']);
+  assert.strictEqual(d.collections[0].desc, 'للخطوبة والفرح');
+  const items = allItems(d);
+  assert.strictEqual(items.find(x => x.id === CS.id).price, 80); assert.strictEqual(items.find(x => x.id === JORY.id).price, 60);
+  assert.ok(!items.some(x => x.id === arch), 'archived product excluded');
+  assert.strictEqual(d.whatsapp, '201141151032'); assert.strictEqual(d.phone, '01141151032'); assert.strictEqual(d.instagram, 'noudella.creative');
+  assert.strictEqual(d.terms, 'اختار المنتجات\nابعتلنا على واتساب'); assert.strictEqual(d.show_prices, true);
+  assert.strictEqual(ok('bootstrap').data.settings.catalog_whatsapp, '+201141151032', 'stored with + so the sheet keeps the zero');
+});
+t('catalogue cache refreshes after any write; GET ?a=catalog works', () => {
+  pub();
+  assert.ok(G._cache['catalog:v1'], 'catalogue cached');
+  refresh(ok('saveProduct', { id: JORY.id, name: JORY.name, selling_price: 65, catalog: { show: true, collection: 'الرومانسي والأفراح', desc: 'وردة جوري' } }).data);
+  assert.ok(!G._cache['catalog:v1'], 'cache cleared by the write');
+  const g = JSON.parse(G.doGet({ parameter: { a: 'catalog' } }).getContent());
+  const it = allItems(g.data).find(x => x.id === JORY.id);
+  assert.strictEqual(it.price, 65); assert.strictEqual(it.desc, 'وردة جوري');
+});
+t('older app save keeps catalogue fields; duplicate starts hidden', () => {
+  refresh(ok('saveProduct', { id: CS.id, name: CS.name, category: 'شموع', selling_price: 80 }).data);
+  assert.strictEqual(CS.catalog_show, true); assert.strictEqual(CS.catalog_desc, 'شمعة كلاسيك بقاعدة');
+  const dup = ok('duplicateProduct', { id: CS.id, name: 'شمعدان نسخة' }).data.products.find(x => x.name === 'شمعدان نسخة');
+  assert.strictEqual(dup.catalog_show, false); assert.strictEqual(dup.collection, 'الكلاسيك والشمعدانات');
+});
+t('bulk catalogue edit is all-or-nothing', () => {
+  const before = pub().data;
+  assert.ok(!api('saveCatalogItems', { items: [{ id: CS.id, show: false }, { id: JORY.id, show: true, badge: 'sale!!' }] }).ok, 'bad badge');
+  assert.ok(allItems(pub().data).some(x => x.id === CS.id), 'nothing written when one row is invalid');
+  assert.ok(!api('saveCatalogItems', { items: [{ id: CS.id }, { id: CS.id }] }).ok, 'duplicate rows');
+  assert.ok(!api('saveCatalogItems', { items: [] }).ok);
+  refresh(ok('saveCatalogItems', { items: [{ id: CS.id, show: false, collection: 'الكلاسيك والشمعدانات' }, { id: JORY.id, show: true, collection: 'الكلاسيك والشمعدانات', sort: 1, badge: 'new' }] }).data);
+  const d = pub().data; assert.ok(!allItems(d).some(x => x.id === CS.id)); assert.strictEqual(allItems(d).find(x => x.id === JORY.id).badge, 'new');
+  assert.ok(before.collections.length >= 1);
+});
+t('catalogue settings validation', () => {
+  const base = { collections: [] };
+  assert.ok(!api('saveCatalogSettings', Object.assign({}, base, { facebook: 'javascript:alert(1)' })).ok);
+  assert.ok(!api('saveCatalogSettings', Object.assign({}, base, { whatsapp: 'abc' })).ok);
+  assert.ok(!api('saveCatalogSettings', Object.assign({}, base, { instagram: 'bad handle!' })).ok);
+  assert.ok(!api('saveCatalogSettings', { collections: [{ name: 'أ' }, { name: 'أ' }] }).ok, 'duplicate collection');
+  assert.ok(!api('saveCatalogSettings', { collections: [], terms: Array(20).fill('سطر').join('\n') }).ok, 'too many lines');
+  assert.ok(api('saveCatalogItems', { items: [{ id: CS.id, show: true, collection: 'الكلاسيك والشمعدانات' }] }).ok, 'valid batch saved');
+});
+
 console.log('\nSafety');
 t('wrong key is refused', () => {
   const r = JSON.parse(G.doPost({ postData: { contents: JSON.stringify({ k: 'nope', action: 'bootstrap' }) } }).getContent());

@@ -13,7 +13,7 @@ var APP = {
   TZ: 'Africa/Cairo',
   KEEP_BACKUPS: 30,
   MAX_WRITES_PER_MIN: 90,
-  VERSION: '1.4.0'
+  VERSION: '1.5.0'
 };
 
 var SCHEMA = {
@@ -21,7 +21,8 @@ var SCHEMA = {
   Materials:  ['id', 'name', 'category', 'kind', 'base_unit', 'stock', 'avg_cost', 'min_stock', 'life_units',
                'supplier', 'notes', 'active', 'created_at', 'updated_at', 'image_id'],
   Products:   ['id', 'name', 'category', 'selling_price', 'other_cost', 'other_cost_label', 'image_id', 'stock',
-               'notes', 'active', 'created_at', 'updated_at', 'weight_g', 'width_cm', 'length_cm'],
+               'notes', 'active', 'created_at', 'updated_at', 'weight_g', 'width_cm', 'length_cm',
+               'catalog_show', 'collection', 'catalog_sort', 'catalog_badge', 'catalog_desc', 'colors', 'lead_time'],
   Recipes:    ['id', 'product_id', 'material_id', 'qty_base', 'input_qty', 'input_unit', 'notes', 'created_at', 'updated_at'],
   Orders:     ['id', 'order_no', 'order_date', 'customer', 'status', 'discount', 'charges', 'extras_json', 'notes',
                'items_revenue', 'revenue', 'product_cost', 'extra_cost', 'profit', 'margin',
@@ -43,16 +44,19 @@ var NUMERIC_COLS = {
   discount: 1, charges: 1, items_revenue: 1, revenue: 1, product_cost: 1, extra_cost: 1, profit: 1, margin: 1,
   qty: 1, unit_price: 1, unit_cost: 1, raw_cost: 1, packaging_cost: 1, tool_cost: 1, line_revenue: 1, line_cost: 1,
   total_price: 1, avg_before: 1, avg_after: 1, stock_after: 1, total_cost: 1, value: 1,
-  weight_g: 1, width_cm: 1, length_cm: 1
+  weight_g: 1, width_cm: 1, length_cm: 1, catalog_sort: 1
 };
+var BOOL_COLS = { active: 1, stock_out: 1, catalog_show: 1 };
 
 /* =========================== Web entry points =========================== */
 
 /**
  * The app itself is hosted on GitHub Pages (works even when a phone/browser is signed into several
  * Google accounts). This exec URL only serves the JSON API below; opening it directly shows a short notice.
+ * GET ?a=catalog is the one public, read-only door: the customer catalogue (safe fields only, never costs).
  */
-function doGet() {
+function doGet(e) {
+  if (e && e.parameter && e.parameter.a === 'catalog') return json_(publicCatalog_());
   return HtmlService.createHtmlOutput('<div dir="rtl" style="font-family:sans-serif;padding:40px;text-align:center;color:#6D1833">' +
     '<h2>نوديلا</h2><p>افتح السيستم من الرابط الخاص بيك.</p></div>').setTitle('نوديلا');
 }
@@ -62,14 +66,16 @@ function doPost(e) {
   var out;
   try {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    if (req.action === 'catalog') return json_(publicCatalog_());      // public, read-only
     var key = PropertiesService.getScriptProperties().getProperty('API_KEY');
     if (!key || String(req.k || '') !== key) out = { ok: false, error: 'رابط غير صالح', auth: false };
     else out = apiCall_(req);
   } catch (err) {
     out = { ok: false, error: 'طلب غير صالح' };
   }
-  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+  return json_(JSON.stringify(out));
 }
+function json_(text) { return ContentService.createTextOutput(text).setMimeType(ContentService.MimeType.JSON); }
 
 /** Single API door for the browser. req = {action, payload, requestId} */
 function apiCall_(req) {
@@ -93,6 +99,7 @@ function apiCall_(req) {
       if (rid) cache.put('rq:' + rid, '1', 21600);
       SpreadsheetApp.flush();
       resetCache_();
+      try { cache.remove(CATALOG_CACHE_); } catch (x) { /* catalogue rebuilds on its own after 10 minutes */ }
       return { ok: true, result: result || null, data: bootstrap_() };
     } finally {
       lock.releaseLock();
@@ -122,7 +129,9 @@ var WRITE_ACTIONS_ = {
   saveSettings: function (p) { return saveSettings_(p); },
   backupNow: function () { return backupNow_(false); },
   saveInvoicePdf: function (p) { return saveInvoicePdf_(p); },
-  setOrderCustomer: function (p) { return setOrderCustomer_(p); }
+  setOrderCustomer: function (p) { return setOrderCustomer_(p); },
+  saveCatalogSettings: function (p) { return saveCatalogSettings_(p); },
+  saveCatalogItems: function (p) { return saveCatalogItems_(p); }
 };
 
 /* =========================== Setup & backups =========================== */
@@ -228,7 +237,7 @@ function ensureSheets_(ss) {
         .setFontWeight('bold').setBackground('#6D1833').setFontColor('#FFFFFF');
       sh.setFrozenRows(1);
       cols.forEach(function (c, i) {
-        if (!NUMERIC_COLS[c] && name !== 'Settings' && c !== 'active' && c !== 'stock_out') {
+        if (!NUMERIC_COLS[c] && name !== 'Settings' && !BOOL_COLS[c]) {
           sh.getRange(2, i + 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');
         }
       });
@@ -240,7 +249,7 @@ function ensureSheets_(ss) {
           var next = sh.getLastColumn() + 1;
           if (next > sh.getMaxColumns()) sh.insertColumnsAfter(sh.getMaxColumns(), 1);
           sh.getRange(1, next).setValue(c).setFontWeight('bold').setBackground('#6D1833').setFontColor('#FFFFFF');
-          if (!NUMERIC_COLS[c] && c !== 'active' && c !== 'stock_out') sh.getRange(2, next, sh.getMaxRows() - 1, 1).setNumberFormat('@');
+          if (!NUMERIC_COLS[c] && !BOOL_COLS[c] && name !== 'Settings') sh.getRange(2, next, sh.getMaxRows() - 1, 1).setNumberFormat('@');
           head.push(c);
         }
       });
@@ -573,6 +582,10 @@ function saveProduct_(p) {
     notes: vStr_(p.notes, 'الملاحظات', 300, false),
     updated_at: now_()
   };
+  if (p.catalog) {
+    var c = catalogFields_(p.catalog);
+    Object.keys(c).forEach(function (k) { rec[k] = c[k]; });
+  } else if (isNew) rec.catalog_show = false;
   if (p.image && p.image.data) rec.image_id = saveImage_(p.image, name);
   if (p.removeImage) rec.image_id = '';
   if (isNew) {
@@ -609,6 +622,8 @@ function duplicateProduct_(p) {
   insert_('Products', [{ id: id, name: name, category: src.category, selling_price: src.selling_price,
     other_cost: src.other_cost, other_cost_label: src.other_cost_label, image_id: '', stock: 0, notes: src.notes,
     weight_g: src.weight_g, width_cm: src.width_cm, length_cm: src.length_cm,
+    catalog_show: false, collection: src.collection, catalog_sort: src.catalog_sort, catalog_badge: src.catalog_badge,
+    catalog_desc: src.catalog_desc, colors: src.colors, lead_time: src.lead_time,
     active: true, created_at: t, updated_at: t }]);
   var lines = rows_('Recipes').filter(function (r) { return r.product_id === src.id; }).map(function (r) {
     return { id: newId_('RCP'), product_id: id, material_id: r.material_id, qty_base: r.qty_base, input_qty: r.input_qty,
@@ -959,6 +974,156 @@ function saveSettings_(p) {
   setSetting_('target_margin', vNum_(p.target_margin, 'هامش الربح المستهدف', { min: 0, max: 95 }));
   log_('update', 'Settings', '', 'settings');
   return {};
+}
+
+/* =========================== Customer catalogue =========================== */
+/* Public page: catalog/ on GitHub Pages. It reads ONLY catalogData_() through GET ?a=catalog (no key).
+   Never add costs, stock, notes, suppliers or customers here. */
+
+var CATALOG_CACHE_ = 'catalog:v1';
+var BADGES_ = ['', 'new', 'best', 'season', 'offer', 'limited'];
+
+function catalogFields_(c) {
+  c = c || {};
+  return {
+    catalog_show: c.show === true || c.show === 'true',
+    collection: vStr_(c.collection, 'مجموعة الكتالوج', 40, false),
+    catalog_sort: vNum_(c.sort, 'ترتيب العرض', { min: 0, max: 9999, dflt: '' }),
+    catalog_badge: vEnum_(String(c.badge || ''), BADGES_, 'علامة المنتج'),
+    catalog_desc: vStr_(c.desc, 'وصف الكتالوج', 160, false),
+    colors: vStr_(c.colors, 'الألوان المتاحة', 80, false),
+    lead_time: vStr_(c.lead_time, 'مدة التنفيذ', 30, false)
+  };
+}
+
+/** Bulk edit from the catalogue screen: show/hide, collection, order and badge for many products at once. */
+function saveCatalogItems_(p) {
+  var items = Array.isArray(p.items) ? p.items : [];
+  if (!items.length) throw new Error('مفيش تعديلات للحفظ');
+  if (items.length > 500) throw new Error('عدد المنتجات أكبر من المسموح');
+  var seen = {};
+  var patches = items.map(function (it) {             // validate everything first, write after
+    var prod = must_('Products', it && it.id, 'المنتج');
+    if (seen[prod.id]) throw new Error('المنتج "' + prod.name + '" مكرر في التعديلات');
+    seen[prod.id] = true;
+    return [prod.id, {
+      catalog_show: it.show === true,
+      collection: vStr_(it.collection, 'مجموعة الكتالوج', 40, false),
+      catalog_sort: vNum_(it.sort, 'ترتيب العرض', { min: 0, max: 9999, dflt: '' }),
+      catalog_badge: vEnum_(String(it.badge || ''), BADGES_, 'علامة المنتج'),
+      updated_at: now_()
+    }];
+  });
+  patches.forEach(function (x) { update_('Products', x[0], x[1]); });
+  log_('update', 'Catalog', '', patches.length + ' منتج');
+  return { count: patches.length };
+}
+
+function saveCatalogSettings_(p) {
+  var cols = Array.isArray(p.collections) ? p.collections : [];
+  if (cols.length > 30) throw new Error('عدد المجموعات أكبر من المسموح (30)');
+  var names = {};
+  var clean = cols.map(function (c) {
+    var name = vStr_(c && c.name, 'اسم المجموعة', 40, true);
+    if (names[name]) throw new Error('المجموعة "' + name + '" مكتوبة مرتين');
+    names[name] = true;
+    return { name: name, desc: vStr_(c.desc, 'وصف المجموعة', 120, false) };
+  });
+  var ig = vStr_(p.instagram, 'حساب إنستجرام', 80, false)
+    .replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/^@/, '').replace(/[/?#].*$/, '');
+  if (ig && !/^[A-Za-z0-9._]{1,30}$/.test(ig)) throw new Error('حساب إنستجرام غير صحيح');
+  var fb = vStr_(p.facebook, 'رابط فيسبوك', 200, false);
+  if (fb && !/^https:\/\/(www\.|m\.|web\.)?(facebook\.com|fb\.com|fb\.me)\/[^\s<>"'`]+$/i.test(fb)) throw new Error('رابط فيسبوك غير صحيح (لازم يبدأ بـ https://www.facebook.com/)');
+  setSetting_('catalog_show_prices', p.show_prices === true);
+  setSetting_('catalog_whatsapp', waIntl_(vPhone_(p.whatsapp)));
+  setSetting_('catalog_instagram', ig);
+  setSetting_('catalog_facebook', fb);
+  setSetting_('catalog_intro', vStr_(p.intro, 'المقدمة', 300, false));
+  setSetting_('catalog_price_note', vStr_(p.price_note, 'ملاحظة الأسعار', 200, false));
+  setSetting_('catalog_terms', vText_(p.terms, 'خطوات الطلب', 900, 12));
+  setSetting_('catalog_collections', JSON.stringify(clean));
+  log_('update', 'Settings', '', 'catalog');
+  return {};
+}
+
+/** Multi-line text (one step per line); empty lines removed. */
+function vText_(v, label, max, maxLines) {
+  var s = (v === undefined || v === null) ? '' : String(v).replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, ' ');
+  var lines = s.split('\n').map(function (l) { return l.trim(); }).filter(function (l) { return l; });
+  s = lines.join('\n');
+  if (s.length > max) throw new Error(label + ': النص أطول من المسموح (' + max + ' حرف)');
+  if (lines.length > maxLines) throw new Error(label + ': أقصى عدد سطور ' + maxLines);
+  return s;
+}
+/** Stored as +20…: a leading "+" keeps the sheet from turning 011… into a number. */
+function waIntl_(phone) {
+  var d = String(phone || '').replace(/[^0-9+]/g, '');
+  if (!d) return '';
+  if (d.charAt(0) === '+') return '+' + d.slice(1).replace(/\D/g, '');
+  if (d.indexOf('00') === 0) return '+' + d.slice(2);
+  if (/^0\d{9,10}$/.test(d)) return '+20' + d.slice(1);
+  return '+' + d;
+}
+
+function publicCatalog_() {
+  var cache = null;
+  try { cache = CacheService.getScriptCache(); var hit = cache.get(CATALOG_CACHE_); if (hit) return hit; } catch (e) { cache = null; }
+  var out;
+  try { out = JSON.stringify({ ok: true, data: catalogData_() }); }
+  catch (e) { console.error('catalog', e && e.stack || e); return JSON.stringify({ ok: false, error: 'الكتالوج مش متاح دلوقتي، جرب كمان شوية' }); }
+  try { if (cache && out.length < 95000) cache.put(CATALOG_CACHE_, out, 600); } catch (e) { /* too big for the cache: served fresh */ }
+  return out;
+}
+
+function catalogData_() {
+  var s = {};
+  rows_('Settings').forEach(function (r) { s[r.key] = r.value; });
+  var showPrices = isTrue_(s.catalog_show_prices);
+  var defs = safeJson_(s.catalog_collections, []);
+  var pos = {};
+  defs.forEach(function (c, i) { if (c && c.name && pos[c.name] === undefined) pos[c.name] = i; });
+  var groups = {};
+  rows_('Products').forEach(function (r) {
+    if (!isTrue_(r.catalog_show) || r.active === false || String(r.active).toUpperCase() === 'FALSE') return;
+    var col = String(r.collection || '').trim() || 'منتجات أخرى';
+    (groups[col] = groups[col] || []).push(r);
+  });
+  var rank = function (n) { return pos[n] === undefined ? 1e6 : pos[n]; };
+  var names = Object.keys(groups).sort(function (a, b) { return rank(a) - rank(b) || String(a).localeCompare(String(b), 'ar'); });
+  var sortKey = function (r) { return r.catalog_sort === '' || r.catalog_sort === null || r.catalog_sort === undefined ? 1e6 : num_(r.catalog_sort); };
+  var intl = String(s.catalog_whatsapp || '');
+  return {
+    v: APP.VERSION,
+    name: String(s.business_name || 'نوديلا'),
+    currency: String(s.currency || 'ج.م'),
+    updated: today_(),
+    intro: String(s.catalog_intro || ''),
+    price_note: String(s.catalog_price_note || ''),
+    terms: String(s.catalog_terms || ''),
+    show_prices: showPrices,
+    whatsapp: intl.replace(/\D/g, ''),
+    phone: /^\+20\d{10}$/.test(intl) ? '0' + intl.slice(3) : intl,
+    instagram: String(s.catalog_instagram || ''),
+    facebook: String(s.catalog_facebook || ''),
+    collections: names.map(function (n) {
+      var def = pos[n] === undefined ? {} : defs[pos[n]];
+      return {
+        name: n,
+        desc: String(def.desc || ''),
+        items: groups[n].sort(function (a, b) { return sortKey(a) - sortKey(b) || String(a.name).localeCompare(String(b.name), 'ar'); })
+          .map(function (r) {
+            return {
+              id: r.id, name: String(r.name), desc: String(r.catalog_desc || ''), badge: String(r.catalog_badge || ''),
+              colors: String(r.colors || ''), lead: String(r.lead_time || ''),
+              weight: num_(r.weight_g) > 0 ? num_(r.weight_g) : null,
+              w: num_(r.width_cm) > 0 ? num_(r.width_cm) : null, l: num_(r.length_cm) > 0 ? num_(r.length_cm) : null,
+              price: showPrices && num_(r.selling_price) > 0 ? num_(r.selling_price) : null,
+              img: r.image_id ? 'https://lh3.googleusercontent.com/d/' + encodeURIComponent(r.image_id) : ''
+            };
+          })
+      };
+    })
+  };
 }
 
 /* =========================== Read model for the app =========================== */

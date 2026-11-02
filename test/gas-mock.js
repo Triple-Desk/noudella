@@ -99,7 +99,7 @@ function makeEnv() {
     PropertiesService: { getScriptProperties: () => ({
       getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); },
       setProperties: o => Object.assign(props, o) }) },
-    CacheService: { getScriptCache: () => ({ get: k => (k in cache ? cache[k] : null), put: (k, v) => { cache[k] = v; } }) },
+    CacheService: { getScriptCache: () => ({ get: k => (k in cache ? cache[k] : null), put: (k, v) => { cache[k] = v; }, remove: k => { delete cache[k]; } }) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },
     Utilities: {
       getUuid: () => crypto.randomUUID(),
@@ -115,10 +115,10 @@ function makeEnv() {
       newTrigger: () => ({ timeBased() { return this; }, everyDays() { return this; }, atHour() { return this; }, create() {} }) },
     HtmlService: { createHtmlOutputFromFile: () => ({}), createHtmlOutput: () => ({ setTitle() { return this; } }) },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: t => ({ text: t, setMimeType() { return this; }, getContent() { return t; } }) },
-    _spreadsheets: spreadsheets, _props: props
+    _spreadsheets: spreadsheets, _props: props, _cache: cache
   };
   vm.createContext(ctx);
-  const dir = path.join(__dirname, '..');
+  const dir = path.join(__dirname, '..', 'apps-script');
   ['Engine.gs', 'Code.gs'].forEach(f => vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f }));
   return ctx;
 }
