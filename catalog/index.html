@@ -270,7 +270,7 @@ textarea.inp{min-height:88px;resize:vertical}
   <div class="medal"><img src="../logo-full.png" alt="نوديلا" width="384" height="384"></div>
   <h1>كتالوج نوديلا</h1>
   <p class="tagline">معمولة بحب… عشان تفضل ذكرى</p>
-  <p class="intro" id="intro">شموع وهدايا معمولة بالإيد في الجيزة. اختار اللي يعجبك وابعتلنا طلبك على واتساب.</p>
+  <p class="intro" id="intro">شموع وديكور معمولين بالإيد في الجيزة، بنجهزهم حسب طلبك وبنشحن لكل مصر.</p>
   <div class="cta">
     <a class="btn btn-ivory" id="heroWa" href="https://wa.me/201141151032" target="_blank" rel="noopener"><svg class="i fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3z"/></svg>كلمنا على واتساب</a>
     <a class="btn btn-line" href="#products">شوف المجموعات</a>
@@ -349,7 +349,7 @@ textarea.inp{min-height:88px;resize:vertical}
   var QR_WA_NUMBER = '201141151032';            // the printed WhatsApp QR above encodes this number
   var H2C = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
   var STORE = 'noudella_catalog', BAG = 'noudella_bag';
-  var DEFAULT_INTRO = 'شموع وهدايا معمولة بالإيد في الجيزة. اختار اللي يعجبك وابعتلنا طلبك على واتساب.';
+  var DEFAULT_INTRO = 'شموع وديكور معمولين بالإيد في الجيزة، بنجهزهم حسب طلبك وبنشحن لكل مصر.';
   var DEFAULT_STEPS = ['اختار المنتجات اللي عاجباك وضيفها لطلبك', 'ابعت الطلب على واتساب من زرار «ابعت الطلب»', 'بنرد عليك نأكد التفاصيل والسعر وميعاد التسليم', 'بنجهز طلبك بإيدينا وبنسلمهولك'];
   var BADGE = { new: ['جديد', 'b-new'], best: ['الأكثر طلبًا', 'b-best'], season: ['موسمي', 'b-soft'], offer: ['عرض خاص', 'b-soft'], limited: ['كمية محدودة', 'b-soft'] };
   var S = { data: null, byId: {}, bag: {}, view: /[?&]view=list/.test(location.search) ? 'list' : 'grid', autoPrint: location.hash === '#print' };
@@ -504,7 +504,7 @@ textarea.inp{min-height:88px;resize:vertical}
     h += '<a href="' + esc(waUrl()) + '" target="_blank" rel="noopener">' + WA_SVG + '<span>واتساب<small class="num">' + esc(d.phone || ('0' + waNum().slice(2))) + '</small></span></a>';
     if (d.instagram) h += '<a href="https://www.instagram.com/' + encodeURIComponent(d.instagram) + '/" target="_blank" rel="noopener">' + ic('ig') + '<span>إنستجرام<small class="en">@' + esc(d.instagram) + '</small></span></a>';
     if (/^https:\/\/(www\.|m\.|web\.)?(facebook\.com|fb\.com|fb\.me)\//i.test(d.facebook || '')) h += '<a href="' + esc(d.facebook) + '" target="_blank" rel="noopener">' + ic('fb') + '<span>فيسبوك<small>صفحة نوديلا</small></span></a>';
-    h += '<span class="ct">' + ic('pin') + '<span>من الجيزة، مصر<small>التوصيل والمواعيد بنتفق عليها</small></span></span>';
+    h += '<span class="ct">' + ic('pin') + '<span>من الجيزة، مصر<small>بنشحن لكل مصر</small></span></span>';
     $('contacts').innerHTML = h;
   }
 
