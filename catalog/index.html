@@ -436,12 +436,6 @@ textarea.inp{min-height:88px;resize:vertical}
     return ph + (it.img ? '<img loading="lazy" decoding="async" alt="" src="' + esc(it.img + '=w' + size) + '" onerror="this.remove()">' : '');
   }
   function badge(it) { var b = BADGE[it.badge]; return b ? '<span class="badge ' + b[1] + '">' + b[0] + '</span>' : ''; }
-  function specs(it) {
-    var a = [];
-    if (it.w || it.l) a.push('<li><span class="num">' + fmt(it.w || 0) + '×' + fmt(it.l || 0) + '</span> سم</li>');
-    if (it.weight) a.push('<li><span class="num">' + fmt(it.weight) + '</span> جم</li>');
-    return a.length ? '<ul class="spec">' + a.join('') + '</ul>' : '';
-  }
   function priceHtml(it) {
     if (it.price !== null && it.price !== undefined) return '<span class="price"><span class="num">' + fmt(it.price) + '</span> <small>' + esc(cur()) + '</small></span>';
     return S.data.show_prices ? '<span class="ask">اسأل عن السعر</span>' : '';
@@ -455,13 +449,11 @@ textarea.inp{min-height:88px;resize:vertical}
   function card(it) {
     return '<article class="card" id="p-' + esc(it.id) + '">' +
       '<button class="frame" data-open="' + esc(it.id) + '" aria-label="تفاصيل ' + esc(it.name) + '">' + media(it, 640) + badge(it) + '</button>' +
-      '<h3 class="c-name">' + esc(it.name) + '</h3>' + (it.desc ? '<p class="c-desc">' + esc(it.desc) + '</p>' : '') + specs(it) +
+      '<h3 class="c-name">' + esc(it.name) + '</h3>' + (it.desc ? '<p class="c-desc">' + esc(it.desc) + '</p>' : '') +
       '<div class="' + footCls(it) + '" data-foot="' + esc(it.id) + '">' + priceHtml(it) + ctl(it.id) + '</div></article>';
   }
   function listRow(it) {
     var s = [];
-    if (it.w || it.l) s.push('<span class="num">' + fmt(it.w || 0) + '×' + fmt(it.l || 0) + '</span> سم');
-    if (it.weight) s.push('<span class="num">' + fmt(it.weight) + '</span> جم');
     return '<div class="prow"><span class="n">' + esc(it.name) + (s.length ? '<span class="s">' + s.join('، ') + '</span>' : '') + '</span>' +
       '<span class="p">' + (it.price !== null && it.price !== undefined ? '<span class="num">' + fmt(it.price) + '</span> ' + esc(cur()) : '<span class="ask">اسأل عن السعر</span>') + '</span></div>';
   }
@@ -564,8 +556,6 @@ textarea.inp{min-height:88px;resize:vertical}
   function openProduct(id) {
     var it = S.byId[id]; if (!it) return;
     var c = S.data.collections[it._c], facts = [];
-    if (it.w || it.l) facts.push(['المقاس', '<span class="num">' + fmt(it.w || 0) + '×' + fmt(it.l || 0) + '</span> سم']);
-    if (it.weight) facts.push(['وزن الشمع', '<span class="num">' + fmt(it.weight) + '</span> جم']);
     if (it.colors) facts.push(['الألوان', esc(it.colors)]);
     if (it.lead) facts.push(['مدة التنفيذ', esc(it.lead)]);
     if (it.price !== null && it.price !== undefined) facts.push(['السعر', '<span class="num">' + fmt(it.price) + '</span> ' + esc(cur())]);

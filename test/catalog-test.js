@@ -67,9 +67,9 @@ function open(opts = {}) {
     assert(!t.includes('شمعة جوري'), 'hidden product shown');
     assert($('#intro').textContent === 'أهلاً بيكم في نوديلا' && $$('#steps li').length === 3, 'intro & steps');
   });
-  await step('prices on: price, ask label for unpriced, badge, specs', () => {
+  await step('prices on: price, ask label for unpriced, badge, no size/weight', () => {
     const card = $('#p-' + CS.id), sh = $('#p-' + SH.id);
-    assert(card.textContent.includes('85') && card.textContent.includes('الأكثر طلبًا') && card.textContent.includes('2×25'), 'card ' + card.textContent);
+    assert(card.textContent.includes('85') && card.textContent.includes('الأكثر طلبًا') && !card.textContent.includes('2×25') && !/جم/.test(card.textContent), 'card ' + card.textContent);
     assert(sh.textContent.includes('اسأل عن السعر'), 'unpriced ' + sh.textContent);
   });
   await step('order: add, step up, bag total, WhatsApp message to the shop number', async () => {
