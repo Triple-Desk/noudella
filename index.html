@@ -648,18 +648,20 @@ VIEWS.product = function (id) {
       (n(p.weight_g) > 0 ? '<span class="badge b-rose">وزن الشمعة: <span class="num">' + fmt(p.weight_g, 1) + '</span> جم</span>' : '') +
       (n(p.width_cm) > 0 || n(p.length_cm) > 0 ? '<span class="badge b-info">المقاس (عرض×طول): <span class="num">' + fmt(p.width_cm, 1) + '×' + fmt(p.length_cm, 1) + '</span> سم</span>' : '') + '</div>' : '') + (!isActive(p) ? '<span class="badge b-gray mt">مؤرشف</span>' : '') + '</div></div>';
   h += '<div class="stockbox ' + (n(p.stock) > 0 ? 'ok' : 'out') + '"><div class="big num">' + fmt(p.stock, 0) + '</div><div class="lbl"><b>' + (n(p.stock) > 0 ? 'قطعة جاهزة' : 'مفيش قطع جاهزة') + '</b><span>في مخزن المنتجات</span></div>' +
-    (recipeOf(p.id).length ? '<button class="btn btn-ghost btn-sm" data-act="goProduction" data-p="' + esc(p.id) + '">' + ic('flame', 'sm') + 'إنتاج</button>' : '') + '</div>';
+    '<button class="btn btn-ghost btn-sm" data-act="goProduction" data-p="' + esc(p.id) + '">' + ic(p.kind === 'resale' ? 'plus' : 'flame', 'sm') + (p.kind === 'resale' ? 'دخّل قطع' : 'إنتاج') + '</button></div>';
   h += '<div class="grid g2 g4 mt">' + stat('تكلفة القطعة', money(c.total)) + stat('سعر البيع', money(p.selling_price)) +
     stat('ربح القطعة', '<span class="' + (c.profit > 0 ? 'pos' : c.profit < 0 ? 'neg' : '') + '">' + money(c.profit) + '</span>') + stat('هامش الربح', pct(c.margin)) + '</div></div>';
   if (c.warnings.length) h += '<div class="callout warn mt">' + ic('alert', 'sm') + '<div>' + c.warnings.map(esc).join('<br>') + '</div></div>';
-  // recipe
-  h += '<div class="sect"><h2>الوصفة (لعمل قطعة واحدة)</h2><span class="grow"></span><button class="btn btn-soft btn-sm" data-act="addLine" data-p="' + esc(p.id) + '">' + ic('plus', 'sm') + 'إضافة</button></div>';
-  if (n(p.weight_g) > 0) {
+  // recipe (ready-made items have none)
+  if (p.kind === 'resale') h += '<div class="callout info mt">' + ic('gift', 'sm') + '<div><b>قطعة جاهزة للبيع.</b> تكلفتها = سعر شراء القطعة (' + money(c.other) + ')، ومش محتاجة وصفة. لما تشتري كمية، دخّلها المخزن من زرار «دخّل قطع».</div></div>';
+  else h += '<div class="sect"><h2>الوصفة (لعمل قطعة واحدة)</h2><span class="grow"></span><button class="btn btn-soft btn-sm" data-act="addLine" data-p="' + esc(p.id) + '">' + ic('plus', 'sm') + 'إضافة</button></div>';
+  if (p.kind !== 'resale' && n(p.weight_g) > 0) {
     var wx = waxInRecipe(p.id), dw = Math.abs(wx - n(p.weight_g));
     h += '<div class="callout ' + (wx === 0 ? 'info' : dw < 0.01 ? 'ok' : 'warn') + ' mb">' + ic(wx && dw < 0.01 ? 'check' : 'alert', 'sm') + '<div>القالب بياخد <b class="num">' + fmt(p.weight_g, 1) + '</b> جم شمع للقطعة' +
       (wx === 0 ? ' — ضيف نوع الشمع للوصفة وهتتكتب الكمية دي لوحدها.' : dw < 0.01 ? ' — والشمع في الوصفة مطابق.' : ' — بس الشمع في الوصفة <b class="num">' + fmt(wx, 1) + '</b> جم.') + '</div></div>';
   }
-  if (!c.lines.length) h += emptyBox('layers', 'أضف الخامات والتغليف والقالب اللي بيدخلوا في القطعة الواحدة', 'addLine', 'إضافة أول خامة').replace('data-act="addLine"', 'data-act="addLine" data-p="' + esc(p.id) + '"');
+  if (p.kind === 'resale') { /* no recipe table */ }
+  else if (!c.lines.length) h += emptyBox('layers', 'أضف الخامات والتغليف والقالب اللي بيدخلوا في القطعة الواحدة', 'addLine', 'إضافة أول خامة').replace('data-act="addLine"', 'data-act="addLine" data-p="' + esc(p.id) + '"');
   else {
     h += '<div class="card tscroll"><table class="t"><thead><tr><th>الخامة</th><th>الكمية</th><th class="n">التكلفة</th><th></th></tr></thead><tbody>';
     ['raw', 'packaging', 'tool'].forEach(function (k) {
@@ -705,19 +707,29 @@ function bar(l, v, tot, cls) { var w = Math.max(0, Math.min(100, n(v) / tot * 10
 function productForm(p, opts) {
   p = p || {}; opts = opts || {};
   var cats = []; prods().forEach(function (x) { if (x.category && cats.indexOf(x.category) < 0) cats.push(x.category); });
-  var body = '<div class="field"><label>اسم المنتج</label><input class="inp" id="pf_name" maxlength="80" value="' + esc(p.name) + '" placeholder="مثال: شمعة الشمعدان"></div>' +
+  var resale = p.kind === 'resale' || (!p.id && opts.kind === 'resale');
+  var body = '<div class="field"><label>اسم المنتج</label><input class="inp" id="pf_name" maxlength="80" value="' + esc(p.name) + '" placeholder="مثال: شمعة الشمعدان أو فتيل"></div>' +
+    '<div class="field"><label>نوع المنتج</label><select class="inp" id="pf_kind"><option value="made"' + (resale ? '' : ' selected') + '>منتج بنعمله (ليه وصفة خامات)</option><option value="resale"' + (resale ? ' selected' : '') + '>قطعة جاهزة للبيع (فتيل، فوارغ اكليريك، قوالب سيليكون…)</option></select></div>' +
+    '<div class="field pf-resale"' + (resale ? '' : ' hidden') + '><label>سعر شراء القطعة (' + cur() + ')</label><input class="inp ltr" id="pf_buy" inputmode="decimal" value="' + esc(n(p.other_cost) ? p.other_cost : '') + '" placeholder="0"><span class="hint">ده اللي بيتحسب منه الربح. القطع بتدخل المخزن من «الإنتاج» على طول من غير خامات.</span></div>' +
     '<div class="field"><label>التصنيف</label><input class="inp" id="pf_cat" maxlength="40" list="pcats" value="' + esc(p.category) + '" placeholder="شموع، هدايا، جبس…"><datalist id="pcats">' + cats.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist></div>' +
     '<div class="field"><label>سعر البيع للقطعة (' + cur() + ')</label><input class="inp ltr" id="pf_price" inputmode="decimal" value="' + esc(p.selling_price || '') + '" placeholder="0"></div>' +
-    '<div class="field"><label>وزن الشمعة (جرام)</label><input class="inp ltr" id="pf_weight" inputmode="decimal" value="' + esc(n(p.weight_g) ? p.weight_g : '') + '" placeholder="مثلاً 70"><span class="hint">كمية الشمع اللي القالب بياخدها لعمل شمعة واحدة.</span></div>' +
+    '<div class="pf-made"' + (resale ? ' hidden' : '') + '><div class="field"><label>وزن الشمعة (جرام)</label><input class="inp ltr" id="pf_weight" inputmode="decimal" value="' + esc(n(p.weight_g) ? p.weight_g : '') + '" placeholder="مثلاً 70"><span class="hint">كمية الشمع اللي القالب بياخدها لعمل شمعة واحدة.</span></div>' +
     '<div class="field"><label>مقاس الشمعة (سم)</label><div class="combo"><input class="inp ltr" id="pf_width" inputmode="decimal" value="' + esc(n(p.width_cm) ? p.width_cm : '') + '" placeholder="العرض"><span style="align-self:center" class="muted">×</span><input class="inp ltr" id="pf_length" inputmode="decimal" value="' + esc(n(p.length_cm) ? p.length_cm : '') + '" placeholder="الطول"></div></div>' +
-    '<div class="field"><label>تكلفة إضافية لكل قطعة (اختياري)</label><div class="combo"><input class="inp ltr" id="pf_other" inputmode="decimal" value="' + esc(n(p.other_cost) ? p.other_cost : '') + '" placeholder="0"><input class="inp" id="pf_other_l" maxlength="40" value="' + esc(p.other_cost_label) + '" placeholder="مثلاً: مصنعية / كهرباء"></div><span class="hint">أي تكلفة ثابتة للقطعة مش خامة (مصنعية، كهرباء…). التغليف يتسجل في الوصفة مش هنا.</span></div>' +
+    '<div class="field"><label>تكلفة إضافية لكل قطعة (اختياري)</label><div class="combo"><input class="inp ltr" id="pf_other" inputmode="decimal" value="' + esc(n(p.other_cost) ? p.other_cost : '') + '" placeholder="0"><input class="inp" id="pf_other_l" maxlength="40" value="' + esc(p.other_cost_label) + '" placeholder="مثلاً: مصنعية / كهرباء"></div><span class="hint">أي تكلفة ثابتة للقطعة مش خامة (مصنعية، كهرباء…). التغليف يتسجل في الوصفة مش هنا.</span></div></div>' +
     photoField('pf', p.image_url, 'صورة المنتج (اختياري)') +
     catalogFields(p, opts.cat) +
     '<div class="field"><label>ملاحظات</label><textarea class="inp" id="pf_notes" maxlength="300">' + esc(p.notes) + '</textarea></div>';
   S.pf = { id: p.id || '', rid: rid(), image: null, removeImage: false };
   modal({ title: p.id ? 'تعديل المنتج' : 'منتج جديد', body: body,
     footer: '<button class="btn btn-ghost" data-act="closeModal">إلغاء</button><button class="btn btn-primary" data-lockable data-act="saveProduct">' + ic('save', 'sm') + 'حفظ</button>',
-    mount: function () { bindPhoto('pf', S.pf); } });
+    mount: function () {
+      bindPhoto('pf', S.pf);
+      document.getElementById('pf_kind').onchange = function () {
+        var r = this.value === 'resale';
+        document.querySelectorAll('.pf-made').forEach(function (x) { x.hidden = r; });
+        document.querySelectorAll('.pf-resale').forEach(function (x) { x.hidden = !r; });
+      };
+    } });
 }
 function photoField(prefix, url, label) {
   return '<div class="field"><label>' + (label || 'صورة (اختياري)') + '</label><div class="row"><div class="hero-img" id="' + prefix + '_prev" style="width:64px;height:64px;border-radius:16px">' + (url ? '<img src="' + esc(url) + '">' : ic('image')) + '</div>' +
@@ -915,6 +927,8 @@ VIEWS.orders = function () {
   h += '<div class="chips mb">' + [['all', 'الكل'], ['draft', 'مسودة'], ['confirmed', 'مؤكد'], ['delivered', 'تم التسليم'], ['cancelled', 'ملغي']].map(function (x) {
     var c = x[0] === 'all' ? all.length : all.filter(function (o) { return o.status === x[0]; }).length;
     return '<button class="chip ' + (f.ordStatus === x[0] ? 'on' : '') + '" data-act="ordStatus" data-v="' + x[0] + '">' + x[1] + ' <span class="num">' + c + '</span></button>'; }).join('') + '</div>';
+  var nCanc = all.filter(function (o) { return o.status === 'cancelled'; }).length;
+  if (f.ordStatus === 'cancelled' && nCanc) h += '<button class="btn btn-ghost btn-block mb" data-lockable data-act="ordDelCancelled">' + ic('trash', 'sm') + 'مسح كل الطلبات الملغية (<span class="num">' + nCanc + '</span>)</button>';
   h += list.length ? '<div class="card list">' + list.map(orderRow).join('') + '</div>' : emptyBox('receipt', 'مفيش طلبات هنا', 'newOrder', 'طلب جديد');
   h += '<button class="btn btn-primary fab" data-act="newOrder">' + ic('plus') + 'طلب جديد</button>';
   return h;
@@ -1041,18 +1055,19 @@ function confirmFlow(lines, go2) {
     confirmBox('تأكيد الطلب', 'هيتم تثبيت الأسعار والتكلفة، وخصم ' + fmt(pieces, 0) + ' قطعة من مخزن المنتجات الجاهزة.', 'تأكيد').then(function (y) { if (y) go2(false); });
     return;
   }
-  var noRecipe = short.filter(function (x) { return !recipeOf(x.p.id).length; });
-  var mNeed = needFor(short.map(function (x) { return { product_id: x.p.id, qty: x.short }; })).filter(function (a) { return a.short > 1e-9; });
-  var can = !noRecipe.length && !mNeed.length;
-  var body = '<div class="callout warn mb">' + ic('alert', 'sm') + '<div>المنتجات الجاهزة في المخزن مش كفاية للطلب ده.</div></div>' +
+  var withR = short.filter(function (x) { return recipeOf(x.p.id).length; });
+  var mNeed = needFor(withR.map(function (x) { return { product_id: x.p.id, qty: x.short }; })).filter(function (a) { return a.short > 1e-9; });
+  var body = '<div class="callout warn mb">' + ic('alert', 'sm') + '<div>المنتجات الجاهزة في المخزن مش كفاية للطلب ده. اختار تكمّل إزاي:</div></div>' +
     '<div class="card tscroll" style="box-shadow:none"><table class="t"><thead><tr><th>المنتج</th><th class="n">مطلوب</th><th class="n">جاهز</th><th class="n">ناقص</th></tr></thead><tbody>' +
     short.map(function (x) { return '<tr><td>' + esc(x.p.name) + '</td><td class="n num">' + fmt(x.need, 0) + '</td><td class="n num">' + fmt(x.ready, 0) + '</td><td class="n neg num">' + fmt(x.short, 0) + '</td></tr>'; }).join('') + '</tbody></table></div>';
-  if (can) body += '<div class="callout info mt">' + ic('flame', 'sm') + '<div>تقدر تخلي السيستم يسجّل إنتاج القطع الناقصة دلوقتي (الخامات كفاية وهتتخصم)، وبعدها يأكد الطلب.</div></div>';
-  else if (noRecipe.length) body += '<div class="callout bad mt">' + ic('alert', 'sm') + '<div>' + noRecipe.map(function (x) { return esc(x.p.name); }).join('، ') + ': ملوش وصفة، فمينفعش يتنتج تلقائي.</div></div>';
-  else body += '<div class="callout bad mt">' + ic('alert', 'sm') + '<div>كمان الخامات مش كفاية لإنتاج الناقص:</div></div><div class="card mt" style="box-shadow:none">' + needTable(mNeed) + '</div>';
+  if (withR.length) body += '<div class="callout info mt">' + ic('flame', 'sm') + '<div><b>إنتاج الناقص وتأكيد:</b> السيستم يسجّل إنتاج القطع الناقصة ويخصم خاماتها' + (mNeed.length ? '، وفيه خامات ناقصة رصيدها هيبقى بالسالب' : '') + '.</div></div>';
+  body += '<div class="callout mt">' + ic('check', 'sm') + '<div><b>تأكيد من غير إنتاج:</b> الطلب يتأكد على طول، ورصيد المنتج يبقى بالسالب لحد ما تسجّل إنتاجه.</div></div>';
   modal({ title: 'القطع الجاهزة مش كفاية', body: body,
-    footer: '<button class="btn btn-ghost" data-act="closeModal">رجوع</button>' + (can ? '<button class="btn btn-primary" id="cfProduce">' + ic('flame', 'sm') + 'إنتاج الناقص وتأكيد</button>' : ''),
-    mount: function () { var b = document.getElementById('cfProduce'); if (b) b.onclick = function () { closeModal(); go2(true); }; } });
+    footer: '<button class="btn btn-ghost" data-act="closeModal">رجوع</button><button class="btn btn-soft" id="cfForce">' + ic('check', 'sm') + 'تأكيد من غير إنتاج</button>' + (withR.length ? '<button class="btn btn-primary" id="cfProduce">' + ic('flame', 'sm') + 'إنتاج الناقص وتأكيد</button>' : ''),
+    mount: function () {
+      var b = document.getElementById('cfProduce'); if (b) b.onclick = function () { closeModal(); go2('produce'); };
+      document.getElementById('cfForce').onclick = function () { closeModal(); go2('force'); };
+    } });
 }
 
 /* ----- customer name / phone (editable at any status) ----- */
@@ -1185,6 +1200,7 @@ VIEWS.order = function (id) {
   if (o.status === 'confirmed') h += '<button class="btn btn-primary" data-lockable data-act="ordStatus2" data-s="delivered" data-p="' + esc(o.id) + '">' + ic('truck', 'sm') + 'تم التسليم</button><button class="btn btn-ghost" data-lockable data-act="ordStatus2" data-s="draft" data-p="' + esc(o.id) + '">' + ic('undo', 'sm') + 'رجوع لمسودة للتعديل</button><button class="btn btn-ghost" data-lockable data-act="ordStatus2" data-s="cancelled" data-p="' + esc(o.id) + '">' + ic('x', 'sm') + 'إلغاء الطلب</button>';
   if (o.status === 'delivered') h += '<button class="btn btn-ghost" data-lockable data-act="ordStatus2" data-s="cancelled" data-p="' + esc(o.id) + '">' + ic('x', 'sm') + 'إلغاء الطلب (القطع ترجع المخزن)</button>';
   if (o.status === 'cancelled') h += '<button class="btn btn-ghost" data-lockable data-act="ordStatus2" data-s="draft" data-p="' + esc(o.id) + '">' + ic('undo', 'sm') + 'إرجاع كمسودة</button>';
+  if (o.status === 'cancelled' || o.status === 'draft') h += '<button class="btn btn-ghost" style="color:#B42318" data-lockable data-act="ordDelete" data-p="' + esc(o.id) + '">' + ic('trash', 'sm') + 'مسح الطلب نهائيًا</button>';
   h += '</div></div></div>';
   return h;
 };
@@ -1211,7 +1227,8 @@ VIEWS.purchases = function () {
     var m = matById(p.material_id) || { base_unit: 'g' };
     return '<div class="li" style="cursor:default"><div class="avatar">' + initials(p.material_name) + '</div><div class="grow"><div class="main-t">' + esc(p.material_name) + (p.status === 'reversed' ? ' <span class="badge b-gray">ملغية</span>' : '') + '</div>' +
       '<div class="faint">' + fmtDate(p.purchase_date) + ' · <span class="num">' + fmt(p.input_qty, 3) + '</span> ' + (UNIT_AR[p.input_unit] || '') + (p.supplier ? ' · ' + esc(p.supplier) : '') + '</div></div>' +
-      '<div class="end"><div style="font-weight:700">' + money(p.total_price) + '</div>' + (p.status !== 'reversed' ? '<button class="link faint" data-act="revPurchase" data-p="' + esc(p.id) + '">إلغاء</button>' : '') + '</div></div>';
+      '<div class="end"><div style="font-weight:700">' + money(p.total_price) + '</div>' + '<div class="row" style="gap:12px;justify-content:flex-end">' + (p.status !== 'reversed' ? '<button class="link faint" data-act="revPurchase" data-p="' + esc(p.id) + '">إلغاء</button>' : '') +
+        '<button class="link" style="color:#B42318" data-act="delPurchase" data-p="' + esc(p.id) + '">مسح</button></div></div></div>';
   }).join('') + '</div>' : emptyBox('cart', 'لسه مفيش مشتريات')) + '</div></div>';
   return h;
 };
@@ -1238,10 +1255,10 @@ function puPreview() {
 VIEWS.production = function () {
   topbar('الإنتاج');
   S.pr = { rid: rid() };
-  var withRecipe = prods().filter(function (p) { return isActive(p) && recipeOf(p.id).length; });
+  var withRecipe = prods().filter(isActive);
   var h = '<div class="split"><div><div class="card pad"><div class="row mb">' + ic('flame') + '<b style="font-size:17px">تسجيل دفعة إنتاج</b></div>' +
     '<div class="field"><label>المنتج</label><select class="inp" id="pr_prod" data-live="pr"><option value="">— اختار المنتج —</option>' + withRecipe.map(function (p) { return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>'; }).join('') + '</select>' +
-    (prods().filter(isActive).length > withRecipe.length ? '<span class="hint">المنتجات اللي من غير وصفة مش بتظهر هنا.</span>' : '') + '</div>' +
+    '<span class="hint">المنتج اللي ملوش وصفة (أو قطعة جاهزة للبيع) قطعه بتدخل المخزن على طول من غير خصم خامات.</span></div>' +
     '<div class="grid g2"><div class="field"><label>عدد القطع</label><input class="inp ltr" id="pr_qty" inputmode="numeric" data-live="pr" placeholder="0"></div><div class="field"><label>التاريخ</label><input class="inp" type="date" id="pr_date" value="' + esc(today()) + '"></div></div>' +
     '<div class="field"><label>ملاحظات</label><input class="inp" id="pr_notes" maxlength="200"></div>' +
     '<div id="pr_prev"></div><button class="btn btn-primary btn-block mt" id="pr_btn" data-lockable data-act="saveProduction">' + ic('check', 'sm') + 'تسجيل الإنتاج وخصم الخامات</button>' +
@@ -1260,10 +1277,12 @@ function prPreview() {
   var p = prodById(val('pr_prod')), q = parseIn(val('pr_qty'));
   if (!p || !(q > 0)) { box.innerHTML = ''; return; }
   var need = needFor([{ product_id: p.id, qty: q }]), short = need.filter(function (a) { return a.short > 1e-9; });
+  var noRecipe = !recipeOf(p.id).length;
   box.innerHTML = '<div class="kv"><span class="muted">تكلفة القطعة</span><b>' + money(p.cost.total) + '</b></div><div class="kv"><span class="muted">تكلفة الدفعة</span><b>' + money(p.cost.total * q) + '</b></div>' +
-    '<div class="card mt" style="box-shadow:none">' + needTable(need) + '</div>' +
-    (short.length ? '<div class="callout bad mt">' + ic('alert', 'sm') + '<div>الخامات مش كفاية. سجّل شراء للخامات الناقصة أو اعمل جرد لو الرصيد غلط. <button class="link" data-act="goPurchase" data-p="' + esc(short[0].m.id) + '">سجل شراء</button></div></div>' : '');
-  if (btn) btn.disabled = !!short.length;
+    (noRecipe ? '<div class="callout info mt">' + ic('gift', 'sm') + '<div>' + (p.kind === 'resale' ? 'قطعة جاهزة للبيع' : 'المنتج ده ملوش وصفة') + '، فالقطع هتدخل المخزن على طول من غير خصم خامات.</div></div>'
+      : '<div class="card mt" style="box-shadow:none">' + needTable(need) + '</div>') +
+    (short.length ? '<div class="callout warn mt">' + ic('alert', 'sm') + '<div>فيه خامات ناقصة. تقدر تسجّل عادي، ورصيد الخامات الناقصة هيبقى بالسالب لحد ما تسجّل شراء أو جرد. <button class="link" data-act="goPurchase" data-p="' + esc(short[0].m.id) + '">سجل شراء</button></div></div>' : '');
+  if (btn) { btn.disabled = false; btn.lastChild.textContent = noRecipe ? 'دخّل القطع المخزن' : 'تسجيل الإنتاج وخصم الخامات'; }
 }
 
 /* ---------- customer catalogue (owner side) ---------- */
@@ -1435,12 +1454,13 @@ var ACT = {
   newProduct: function () { productForm(null); },
   editProduct: function (el) { productForm(prodById(el.getAttribute('data-p')), { cat: el.getAttribute('data-cat') === '1' }); },
   saveProduct: function () {
-    var price = parseIn(val('pf_price')), other = parseIn(val('pf_other')), wg = parseIn(val('pf_weight')), wd = parseIn(val('pf_width')), ln = parseIn(val('pf_length'));
+    var kind = val('pf_kind') || 'made', resale = kind === 'resale';
+    var price = parseIn(val('pf_price')), other = parseIn(val(resale ? 'pf_buy' : 'pf_other')), wg = resale ? '' : parseIn(val('pf_weight')), wd = resale ? '' : parseIn(val('pf_width')), ln = resale ? '' : parseIn(val('pf_length'));
     if ([price, other, wg, wd, ln].some(function (x) { return x !== '' && (isNaN(x) || x < 0); })) return toast('اكتب الأرقام بشكل صحيح', 'err');
     var cs = parseIn(val('pf_csort'));
     if (cs !== '' && (isNaN(cs) || cs < 0)) return toast('اكتب ترتيب العرض رقم صحيح', 'err');
     var pl = { id: S.pf.id, name: val('pf_name'), category: val('pf_cat'), selling_price: price === '' ? 0 : price, other_cost: other === '' ? 0 : other,
-      other_cost_label: val('pf_other_l'), weight_g: wg, width_cm: wd, length_cm: ln, notes: val('pf_notes'), image: S.pf.image, removeImage: S.pf.removeImage,
+      other_cost_label: resale ? 'سعر شراء القطعة' : val('pf_other_l'), kind: kind, weight_g: wg, width_cm: wd, length_cm: ln, notes: val('pf_notes'), image: S.pf.image, removeImage: S.pf.removeImage,
       catalog: { show: document.getElementById('pf_cshow').checked, collection: val('pf_ccol'), desc: val('pf_cdesc'), badge: val('pf_cbadge'), sort: cs,
         colors: val('pf_ccolors'), lead_time: val('pf_clead') } };
     run('saveProduct', pl, { rid: S.pf.rid, ok: 'تم حفظ المنتج' }).then(function (r) { if (r) { closeModal(); go('product', (r.result && r.result.id) || S.pf.id); } });
@@ -1520,6 +1540,27 @@ var ACT = {
     run('savePurchase', { material_id: val('pu_mat'), qty: q, unit: val('pu_unit'), total_price: t, date: val('pu_date'), supplier: val('pu_sup'), notes: val('pu_notes') }, { rid: S.pu.rid, ok: 'تم تسجيل الشراء وتحديث المتوسط' })
       .then(function (r) { if (r) go('purchases'); });
   },
+  delPurchase: function (el) {
+    var id = el.getAttribute('data-p'), pu = (S.data.purchases || []).find(function (x) { return x.id === id; }), r0 = rid();
+    confirmBox('مسح عملية الشراء', pu && pu.status !== 'reversed' ? 'الشراء ده هيتمسح من القائمة، وكميته هتتشال من رصيد الخامة ومتوسط التكلفة يتظبط. المسح نهائي.' : 'الشراء الملغي ده هيتمسح من القائمة نهائيًا.', 'مسح', true)
+      .then(function (y) { if (y) run('deletePurchase', { id: id }, { rid: r0, ok: 'اتمسح الشراء' }).then(function (r) { if (r) render(); }); });
+  },
+  ordDelete: function (el) {
+    var id = el.getAttribute('data-p'), r0 = rid();
+    confirmBox('مسح الطلب نهائيًا', 'الطلب هيتمسح من السيستم وفاتورته كمان. المسح نهائي.', 'مسح', true)
+      .then(function (y) { if (y) run('deleteOrder', { id: id }, { rid: r0, ok: 'اتمسح الطلب' }).then(function (r) { if (r) go('orders'); }); });
+  },
+  ordDelCancelled: function () {
+    var ids = S.data.orders.filter(function (o) { return o.status === 'cancelled'; }).map(function (o) { return o.id; });
+    confirmBox('مسح الطلبات الملغية', 'هيتمسح ' + ids.length + ' طلب ملغي نهائيًا مع فواتيرهم.', 'مسح الكل', true).then(function (y) {
+      if (!y) return;
+      var i = 0, step = function () {
+        if (i >= ids.length) { toast('اتمسحت الطلبات الملغية', 'ok'); render(); return; }
+        run('deleteOrder', { id: ids[i++] }, { rid: rid() }).then(function (r) { if (r) step(); else render(); });
+      };
+      step();
+    });
+  },
   revPurchase: function (el) {
     var id = el.getAttribute('data-p');
     confirmBox('إلغاء عملية الشراء', 'الكمية هتتشال من الرصيد والمتوسط يرجع زي ما كان. ده متاح بس لو مفيش حركة اتعملت على الخامة بعد الشراء ده.', 'إلغاء الشراء', true)
@@ -1530,7 +1571,7 @@ var ACT = {
     if (!val('pr_prod')) return toast('اختار المنتج', 'err');
     if (!(q > 0) || Math.floor(q) !== q) return toast('اكتب عدد قطع صحيح', 'err');
     var p = prodById(val('pr_prod'));
-    confirmBox('تأكيد الإنتاج', 'هيتم خصم خامات ' + fmt(q) + ' قطعة من "' + esc(p.name) + '" من المخزن.', 'تسجيل').then(function (y) {
+    confirmBox('تأكيد الإنتاج', recipeOf(p.id).length ? 'هيتم خصم خامات ' + fmt(q) + ' قطعة من "' + esc(p.name) + '" من المخزن.' : 'هيدخل ' + fmt(q) + ' قطعة من "' + esc(p.name) + '" مخزن المنتجات.', 'تسجيل').then(function (y) {
       if (!y) return;
       run('recordProduction', { product_id: p.id, qty: q, date: val('pr_date'), notes: val('pr_notes') }, { rid: S.pr.rid, ok: 'تم تسجيل الإنتاج' })
         .then(function (r) { if (r) go('production'); });
@@ -1565,8 +1606,8 @@ var ACT = {
   odConfirm: function () {
     var pl = odPayload(true); if (!pl) return;
     var d = S.draft;
-    confirmFlow(pl.lines, function (produce) {
-      pl.produce = produce;
+    confirmFlow(pl.lines, function (mode) {
+      var produce = mode === 'produce'; pl.produce = produce; pl.force = mode === 'force';
       run('saveOrder', pl, { rid: d.rid }).then(function (r) {
         if (!r) return;
         S.draft = null;
@@ -1577,8 +1618,9 @@ var ACT = {
   },
   ordConfirm: function (el) {
     var id = el.getAttribute('data-p'), o = S.data.orders.find(function (x) { return x.id === id; }), r0 = rid();
-    confirmFlow(o.lines, function (produce) {
-      run('confirmOrder', { id: id, produce: produce }, { rid: r0, ok: produce ? 'اتنتج الناقص واتأكد الطلب' : 'تم تأكيد الطلب' }).then(function (r) { if (r) go('invoice', id); });
+    confirmFlow(o.lines, function (mode) {
+      var produce = mode === 'produce';
+      run('confirmOrder', { id: id, produce: produce, force: mode === 'force' }, { rid: r0, ok: produce ? 'اتنتج الناقص واتأكد الطلب' : 'تم تأكيد الطلب' }).then(function (r) { if (r) go('invoice', id); });
     });
   },
   ordStatus2: function (el) {

@@ -175,12 +175,16 @@ t('deliver keeps stock; cancel returns pieces exactly once', () => {
   refresh(ok('setOrderStatus', { id: ORDER_ID, status: 'draft' }).data);
   near(CS.stock, 10, 'reopening a cancelled order does not return twice');
 });
-t('material shortage blocks auto-production and keeps the draft', () => {
+t('sell anyway (force): stock goes below zero, cancel + delete clean it up', () => {
   const wax0 = WAX.stock, cs0 = CS.stock, n0 = D.orders.length;
-  const r = ok('saveOrder', { lines: [{ product_id: CS.id, qty: 1000, unit_price: 80 }], confirm: true, produce: true });
-  assert.strictEqual(r.result.code, 'MATERIAL_SHORT'); assert.ok(r.result.details.some(d => d.material_id === WAX.id));
-  refresh(r.data); assert.strictEqual(D.orders.length, n0 + 1);
-  assert.strictEqual(D.orders.find(x => x.id === r.result.id).status, 'draft'); near(WAX.stock, wax0); near(CS.stock, cs0);
+  const r = ok('saveOrder', { lines: [{ product_id: CS.id, qty: 1000, unit_price: 80 }], confirm: true, force: true });
+  assert.ok(!r.result.confirmError, r.result.confirmError); refresh(r.data);
+  assert.strictEqual(D.orders.find(x => x.id === r.result.id).status, 'confirmed'); near(CS.stock, cs0 - 1000); near(WAX.stock, wax0, 'no production');
+  assert.ok(!api('deleteOrder', { id: r.result.id }).ok, 'confirmed order cannot be deleted');
+  refresh(ok('setOrderStatus', { id: r.result.id, status: 'cancelled' }).data); near(CS.stock, cs0);
+  refresh(ok('deleteOrder', { id: r.result.id }).data);
+  assert.strictEqual(D.orders.length, n0); near(CS.stock, cs0);
+  assert.ok(!ok('bootstrap').data.orders.some(o => o.id === r.result.id));
 });
 t('empty order and invalid values rejected', () => {
   assert.ok(!api('saveOrder', { lines: [] }).ok);
@@ -244,9 +248,13 @@ t('candle weight & size are real fields; notes migrate', () => {
 });
 
 console.log('\nProduction');
-t('shortage blocks production and lists materials', () => {
-  const r = api('recordProduction', { product_id: CS.id, qty: 1000 });
-  assert.ok(!r.ok); assert.ok(r.details && r.details.some(d => d.material_id === WAX.id));
+t('production never blocks: missing materials go below zero', () => {
+  refresh(ok('saveMaterial', { name: 'خامة تجربة', kind: 'raw', base_unit: 'g', price: { amount: 10, qty: 100, unit: 'g' } }).data);
+  const tm = byName(D.materials, 'خامة تجربة');
+  const pid = ok('saveProduct', { name: 'منتج تجربة', selling_price: 30 }).result.id;
+  refresh(ok('saveRecipeLine', { product_id: pid, material_id: tm.id, qty: 5, unit: 'g' }).data);
+  refresh(ok('recordProduction', { product_id: pid, qty: 2 }).data);
+  near(byName(D.materials, 'خامة تجربة').stock, -10); near(byName(D.products, 'منتج تجربة').stock, 2);
 });
 let BATCH;
 t('production consumes exact materials once (tools not consumed)', () => {
@@ -279,6 +287,42 @@ t('migration marks old delivered orders as already out', () => {
   assert.strictEqual(sh.grid[row][col], true);
 });
 
+const resetRate = () => Object.keys(G._cache).filter(k => k.startsWith('rl:')).forEach(k => delete G._cache[k]); // one test run = many minutes of real use
+resetRate();
+console.log('\nFree work (v1.6.0)');
+t('ready-made item: no recipe, purchase cost, pieces in, sold without stock', () => {
+  const pid = ok('saveProduct', { name: 'قالب سيليكون', kind: 'resale', selling_price: 150, other_cost: 90, other_cost_label: 'سعر شراء القطعة' }).result.id;
+  refresh(ok('recordProduction', { product_id: pid, qty: 3, notes: 'استلام' }).data);
+  const p = byName(D.products, 'قالب سيليكون');
+  assert.strictEqual(p.kind, 'resale'); near(p.stock, 3); near(p.cost.total, 90);
+  const r = ok('saveOrder', { lines: [{ product_id: pid, qty: 5, unit_price: 150 }], confirm: true, force: true });
+  refresh(r.data); near(byName(D.products, 'قالب سيليكون').stock, -2);
+  const o = D.orders.find(x => x.id === r.result.id); near(o.profit, 5 * (150 - 90));
+});
+t('produce option skips products without a recipe and still confirms', () => {
+  const pid = ok('saveProduct', { name: 'فوارغ اكليريك', kind: 'resale', selling_price: 40, other_cost: 25 }).result.id;
+  const r = ok('saveOrder', { lines: [{ product_id: pid, qty: 2, unit_price: 40 }], confirm: true, produce: true });
+  assert.ok(!r.result.confirmError, r.result.confirmError); refresh(r.data); near(byName(D.products, 'فوارغ اكليريك').stock, -2);
+});
+t('draft order can be deleted; delivered cannot', () => {
+  const r = ok('saveOrder', { lines: [{ product_id: CS.id, qty: 1, unit_price: 80 }] });
+  refresh(ok('deleteOrder', { id: r.result.id }).data); assert.ok(!D.orders.some(o => o.id === r.result.id));
+  const d = D.orders.find(o => o.status === 'delivered');
+  if (d) assert.ok(!api('deleteOrder', { id: d.id }).ok);
+});
+t('delete purchase: active one leaves the stock, reversed one only leaves the list', () => {
+  refresh(ok('saveMaterial', { name: 'فتيل للبيع', kind: 'raw', base_unit: 'cm', price: { amount: 100, qty: 10, unit: 'm' }, opening: { qty: 10, unit: 'm' } }).data);
+  const m0 = byName(D.materials, 'فتيل للبيع'); near(m0.stock, 1000); near(m0.avg_cost, 0.1);
+  const p1 = ok('savePurchase', { material_id: m0.id, qty: 10, unit: 'm', total_price: 300 }).result.id;
+  refresh(ok('bootstrap').data); near(byName(D.materials, 'فتيل للبيع').stock, 2000); near(byName(D.materials, 'فتيل للبيع').avg_cost, 0.2);
+  refresh(ok('deletePurchase', { id: p1 }).data);
+  const m1 = byName(D.materials, 'فتيل للبيع'); near(m1.stock, 1000); near(m1.avg_cost, 0.1); assert.ok(!D.purchases.some(x => x.id === p1));
+  const p2 = ok('savePurchase', { material_id: m0.id, qty: 5, unit: 'm', total_price: 100 }).result.id;
+  refresh(ok('reversePurchase', { id: p2 }).data); const st = byName(D.materials, 'فتيل للبيع').stock;
+  refresh(ok('deletePurchase', { id: p2 }).data); near(byName(D.materials, 'فتيل للبيع').stock, st); assert.ok(!D.purchases.some(x => x.id === p2));
+});
+
+resetRate();
 console.log('\nCatalogue');
 const pub = () => JSON.parse(G.doPost({ postData: { contents: JSON.stringify({ action: 'catalog' }) } }).getContent());
 const allItems = d => d.collections.reduce((a, c) => a.concat(c.items), []);

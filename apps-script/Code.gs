@@ -13,7 +13,7 @@ var APP = {
   TZ: 'Africa/Cairo',
   KEEP_BACKUPS: 30,
   MAX_WRITES_PER_MIN: 90,
-  VERSION: '1.5.0'
+  VERSION: '1.6.0'
 };
 
 var SCHEMA = {
@@ -22,7 +22,7 @@ var SCHEMA = {
                'supplier', 'notes', 'active', 'created_at', 'updated_at', 'image_id'],
   Products:   ['id', 'name', 'category', 'selling_price', 'other_cost', 'other_cost_label', 'image_id', 'stock',
                'notes', 'active', 'created_at', 'updated_at', 'weight_g', 'width_cm', 'length_cm',
-               'catalog_show', 'collection', 'catalog_sort', 'catalog_badge', 'catalog_desc', 'colors', 'lead_time'],
+               'catalog_show', 'collection', 'catalog_sort', 'catalog_badge', 'catalog_desc', 'colors', 'lead_time', 'kind'],
   Recipes:    ['id', 'product_id', 'material_id', 'qty_base', 'input_qty', 'input_unit', 'notes', 'created_at', 'updated_at'],
   Orders:     ['id', 'order_no', 'order_date', 'customer', 'status', 'discount', 'charges', 'extras_json', 'notes',
                'items_revenue', 'revenue', 'product_cost', 'extra_cost', 'profit', 'margin',
@@ -122,7 +122,7 @@ var WRITE_ACTIONS_ = {
   saveRecipeLine: function (p) { return saveRecipeLine_(p); },
   deleteRecipeLine: function (p) { return deleteRecipeLine_(p); },
   saveOrder: function (p) { return saveOrder_(p); },
-  confirmOrder: function (p) { return confirmOrder_(p.id, { produce: p.produce === true }); },
+  confirmOrder: function (p) { return confirmOrder_(p.id, { produce: p.produce === true, force: p.force === true }); },
   setOrderStatus: function (p) { return setOrderStatus_(p); },
   recordProduction: function (p) { return recordProduction_(p); },
   reverseProduction: function (p) { return reverseProduction_(p); },
@@ -131,7 +131,9 @@ var WRITE_ACTIONS_ = {
   saveInvoicePdf: function (p) { return saveInvoicePdf_(p); },
   setOrderCustomer: function (p) { return setOrderCustomer_(p); },
   saveCatalogSettings: function (p) { return saveCatalogSettings_(p); },
-  saveCatalogItems: function (p) { return saveCatalogItems_(p); }
+  saveCatalogItems: function (p) { return saveCatalogItems_(p); },
+  deleteOrder: function (p) { return deleteOrder_(p); },
+  deletePurchase: function (p) { return deletePurchase_(p); }
 };
 
 /* =========================== Setup & backups =========================== */
@@ -563,6 +565,28 @@ function reversePurchase_(p) {
   return { id: pur.id };
 }
 
+/**
+ * Delete a purchase from the list. If it still counts in stock, its quantity leaves the material first
+ * (the average cost is un-blended: exact when nothing was used since, a close estimate otherwise).
+ * Stock may go below zero — the owner works freely and fixes counts with "تعديل الرصيد".
+ */
+function deletePurchase_(p) {
+  var pur = must_('Purchases', p.id, 'عملية الشراء');
+  var m = find_('Materials', pur.material_id);
+  if (pur.status !== 'reversed' && m) {
+    var q = num_(pur.qty_base), stock = num_(m.stock), avg = num_(m.avg_cost);
+    var after = r6_(stock - q), newAvg = avg;
+    if (after > 1e-9) newAvg = Math.max(0, (stock * avg - num_(pur.total_price)) / after);
+    else if (num_(pur.avg_before) > 0) newAvg = num_(pur.avg_before);
+    update_('Materials', m.id, { stock: after, avg_cost: r6_(newAvg), updated_at: now_() });
+    movement_({ item_id: m.id, item_name: m.name, type: 'PURCHASE_DELETE', qty: -q, unit_cost: pur.unit_cost,
+                stock_after: after, ref_type: 'purchase', ref_id: pur.id, notes: 'مسح شراء' });
+  }
+  deleteRow_('Purchases', pur.id);
+  log_('delete', 'Purchase', pur.id, (pur.material_name || '') + ' ' + pur.input_qty + ' ' + pur.input_unit + ' = ' + pur.total_price);
+  return { id: pur.id };
+}
+
 /* =========================== Products & recipes =========================== */
 
 function saveProduct_(p) {
@@ -582,6 +606,8 @@ function saveProduct_(p) {
     notes: vStr_(p.notes, 'الملاحظات', 300, false),
     updated_at: now_()
   };
+  if (p.kind !== undefined) rec.kind = vEnum_(String(p.kind || 'made'), ['made', 'resale'], 'نوع المنتج');
+  else if (isNew) rec.kind = 'made';
   if (p.catalog) {
     var c = catalogFields_(p.catalog);
     Object.keys(c).forEach(function (k) { rec[k] = c[k]; });
@@ -755,10 +781,22 @@ function saveOrder_(p) {
   insert_('OrderLines', lines);
   log_(isNew ? 'create' : 'update', 'Order', id, (rec.order_no || order.order_no) + ' ' + tot.revenue);
   if (p.confirm) {
-    try { confirmOrder_(id, { produce: p.produce === true }); }
+    try { confirmOrder_(id, { produce: p.produce === true, force: p.force === true }); }
     catch (e) { return { id: id, confirmError: e.message, code: e.code || '', details: e.details || null }; }
   }
   return { id: id };
+}
+
+/** Remove a cancelled (or draft) order for good. Its pieces are already back in stock (stock_out false). */
+function deleteOrder_(p) {
+  var order = must_('Orders', p.id, 'الطلب');
+  if (order.status !== 'cancelled' && order.status !== 'draft') throw new Error('امسح الطلب بعد ما تلغيه بس. الطلب المؤكد أو المسلَّم لازم يتلغى الأول.');
+  if (isTrue_(order.stock_out)) moveOrderStock_(order, +1, 'SALE_RETURN');
+  if (order.invoice_file_id) { try { DriveApp.getFileById(order.invoice_file_id).setTrashed(true); } catch (e) { /* already gone */ } }
+  deleteOrderLines_(order.id);
+  deleteRow_('Orders', order.id);
+  log_('delete', 'Order', order.id, order.order_no + ' ' + (order.customer || '') + ' ' + order.revenue);
+  return { id: order.id };
 }
 
 function deleteOrderLines_(orderId) {
@@ -816,24 +854,20 @@ function confirmOrder_(id, opts) {
   var lines = rows_('OrderLines').filter(function (l) { return l.order_id === id; });
   if (!lines.length) throw new Error('الطلب فارغ');
 
+  // Free selling: missing pieces never block. The owner chooses: produce them first (opts.produce — products
+  // with a recipe; materials may go below zero) or sell anyway (opts.force — the product stock goes below zero).
   var short = productShortage_(id);
-  if (short.length && !opts.produce) {
+  if (short.length && !opts.produce && !opts.force) {
     var e1 = new Error('المنتجات الجاهزة في المخزن مش كفاية للطلب');
     e1.code = 'PRODUCT_SHORT'; e1.details = short; throw e1;
   }
-  if (short.length) {
+  var produced = [];
+  if (short.length && opts.produce) {
     var ctx0 = costContext_();
     short.forEach(function (x) {
-      if (!(ctx0.byProd[x.product_id] || []).length) throw new Error('"' + x.name + '" ملوش وصفة، مينفعش يتنتج تلقائي');
-    });
-    var needM = requiredMaterials_(short.map(function (x) { return { product_id: x.product_id, qty: x.short }; }), ctx0.byProd, ctx0.mById)
-      .filter(function (n) { return n.short > 1e-9; });
-    if (needM.length) {
-      var e2 = new Error('الخامات مش كفاية لإنتاج القطع الناقصة');
-      e2.code = 'MATERIAL_SHORT'; e2.details = needM; throw e2;
-    }
-    short.forEach(function (x) {
+      if (!(ctx0.byProd[x.product_id] || []).length) return;     // no recipe: sold as is
       recordProduction_({ product_id: x.product_id, qty: x.short, notes: 'إنتاج لطلب ' + order.order_no });
+      produced.push(x);
     });
   }
 
@@ -854,7 +888,7 @@ function confirmOrder_(id, opts) {
     margin: tot.margin === null ? '' : tot.margin, updated_at: now_() });
   moveOrderStock_(order, -1, 'SALE');
   log_('confirm', 'Order', id, order.order_no + ' ربح ' + tot.profit);
-  return { id: id, produced: short };
+  return { id: id, produced: produced };
 }
 
 function isTrue_(v) { return v === true || v === 'TRUE' || v === 'true'; }
@@ -863,7 +897,7 @@ function setOrderStatus_(p) {
   var order = must_('Orders', p.id, 'الطلب');
   var to = String(p.status || '');
   if ((ORDER_FLOW_[order.status] || []).indexOf(to) === -1) throw new Error('لا يمكن تغيير حالة الطلب بهذا الشكل');
-  if (to === 'confirmed') return confirmOrder_(order.id, { produce: p.produce === true });
+  if (to === 'confirmed') return confirmOrder_(order.id, { produce: p.produce === true, force: p.force === true });
   // Cancelled or re-opened: pieces that left the store come back (only once, guarded by stock_out).
   if ((to === 'cancelled' || to === 'draft') && isTrue_(order.stock_out)) moveOrderStock_(order, +1, 'SALE_RETURN');
   var patch = { status: to, updated_at: now_() };
@@ -909,15 +943,9 @@ function recordProduction_(p) {
   var prod = must_('Products', p.product_id, 'المنتج');
   var qty = vNum_(p.qty, 'عدد القطع', { gt: 0, max: 1e6, int: true, required: true });
   var ctx = costContext_();
-  var lines = ctx.byProd[prod.id] || [];
-  if (!lines.length) throw new Error('المنتج ليس له وصفة. أضف الوصفة أولًا.');
+  // Free work: no recipe = pieces just enter the store (ready-made / bought items, cost from the product);
+  // missing materials do not block — their stock goes below zero until a purchase or count fixes it.
   var need = requiredMaterials_([{ product_id: prod.id, qty: qty }], ctx.byProd, ctx.mById);
-  var short = need.filter(function (n) { return n.short > 1e-9; });
-  if (short.length) {
-    var err = new Error('الخامات غير كافية لإنتاج ' + qty + ' قطعة');
-    err.details = short;
-    throw err;
-  }
   var cost = costOf_(prod, ctx);
   var date = vDate_(p.date);
   var id = newId_('BAT');
