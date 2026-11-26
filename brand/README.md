@@ -22,3 +22,14 @@ Minimum logo size: 15 mm.
 - `qr-*-paper.svg` — QR codes on the ivory print ground.
 - `previews/print-kit-overview.jpg`, `previews/print-kit-contact-sheet.jpg` — previews of the whole print set.
 - Print family rules: grounds ivory #FBF4E8 and wine #5A0C18; sprig stem #9C724E, leaves #E6CDA4 / #D2A66B, berries #6D1833 / #8A242A; internal pieces (shipping label, order prep card) white A6, 4 per A4; cut shapes: round 4/8 cm, seal & fragile 2 mm rounded rectangles, tags with 7 mm clipped corners and a 4 mm hole.
+
+## Event kit (2026-11-26)
+- Design canvas «تصميمات نوديلا», page «المعرض» (first page): roll-up 85 × 200 cm, table front drop 50 × 70 cm, framed name sign A5,
+  price list A4, price tents (6 per A4, folded), QR sign A5, favours sign A5, stick tag 4 × 4 cm front/back, round bouquet tag 5 cm
+  front/back, flyer A5 two sides, booking form A5, print-shop guide A4 (sizes, stock, finish, quantities).
+- Burgundy #6D1833 is the major colour on every print ground now (the older wine #5A0C18 grounds were moved to it); gold #C8944A
+  lines and ivory #FBF4E8 paper; fonts unchanged (Amiri, IBM Plex Sans Arabic, Cormorant Garamond, Pinyon Script).
+- `illustrations/gerbera-*.svg` — original gerbera (daisy) line art from the owner's tag reference: corner cluster, spray, single,
+  head; `-ivory` = burgundy lines on ivory, `-burgundy` = gold lines on burgundy. `gerbera.py out/` regenerates them.
+- Prices on the price list and tents come from the live catalogue of 2026-11-26 (names spelled for print).
+- `previews/event-kit-overview.jpg` — the whole event kit at a glance.
